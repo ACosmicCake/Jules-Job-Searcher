@@ -1,0 +1,61 @@
+# AI Job Agent Requirements
+
+This file provides guidance on setting up the necessary environments for the AI Job Agent project.
+
+## Backend (Python)
+
+The backend is built using Python and FastAPI. Dependencies are managed in `webapp/backend/requirements.txt`.
+
+To set up and run the backend:
+1.  Ensure you have Python 3.8+ installed.
+2.  Navigate to the project root directory.
+3.  Create a virtual environment (recommended):
+    ```bash
+    python -m venv venv
+    ```
+4.  Activate the virtual environment:
+    *   On macOS/Linux:
+        ```bash
+        source venv/bin/activate
+        ```
+    *   On Windows:
+        ```bash
+        venv\Scripts\activate
+        ```
+5.  Install the required Python packages:
+    ```bash
+    pip install -r webapp/backend/requirements.txt
+    ```
+6.  Initialize the database (if not already done):
+    ```bash
+    python database_setup.py
+    ```
+7.  To run the backend development server:
+    From the project root directory, run:
+    ```bash
+    uvicorn webapp.backend.main:app --reload --host 0.0.0.0 --port 8000
+    ```
+
+## Frontend (Vue.js / Node.js)
+
+The frontend is built using Vue.js (with Vite) and requires Node.js (preferably LTS version) and npm.
+
+To set up and run the frontend:
+1.  Ensure you have Node.js and npm installed.
+2.  Navigate to the frontend directory:
+    ```bash
+    cd webapp/frontend
+    ```
+3.  Install frontend dependencies:
+    ```bash
+    npm install
+    ```
+4.  To start the frontend development server:
+    ```bash
+    npm run dev
+    ```
+    This will typically make the frontend available at `http://localhost:5173` or a similar address.
+
+## Other Tools (Optional)
+
+You might also want to install tools for linting, formatting, or pre-commit hooks based on project conventions (e.g., Black, Flake8 for Python; ESLint, Prettier for JavaScript/Vue). These are not explicitly listed here yet.

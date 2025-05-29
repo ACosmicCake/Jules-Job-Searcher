@@ -1,9 +1,23 @@
+# FastAPI and Uvicorn
 fastapi
 uvicorn[standard]
 python-multipart
-# Add other backend dependencies here as we identify them
+
+# CV Parsing
+python-docx
+pdfplumber
+
+# Job Scraping
+python-jobspy
+pandas
+
+# Utility script dependencies (e.g., for generate_dummy_pdf.py)
+reportlab 
+
+# Add other backend-specific dependencies here as identified.
 # For example:
-# pydantic
-# sqlalchemy
+# sqlalchemy (if using a more complex ORM)
 # psycopg2-binary (if using PostgreSQL)
 # python-jose[cryptography] (for JWT auth)
+# aiofiles (for async file operations)
+# jinja2 (if serving HTML templates from backend)

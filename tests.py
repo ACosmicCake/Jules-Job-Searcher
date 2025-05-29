@@ -1,284 +1,355 @@
-import unittest
+import pytest
+from fastapi.testclient import TestClient
 import json
-import os # For file operations in setUp/tearDown
+from pathlib import Path
+import shutil
+import os
+import time
+import sqlite3
 
-# Commented out for now, will be imported when tests are written
-# from cv_parser import (
-#     extract_text_from_docx,
-#     extract_text_from_pdf,
-#     parse_cv,
-#     save_parsed_data,
-#     COMMON_SECTION_HEADINGS
-# )
-# from agent import load_json_file
+# Add project root to sys.path to allow importing webapp.backend.main and other modules
+import sys
+PROJECT_ROOT_FOR_TESTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT_FOR_TESTS))
 
+# Import the FastAPI app instance from webapp.backend.main
+# This import should happen AFTER sys.path is modified.
+# It will also trigger the logging setup in main.py for the first time.
+from webapp.backend.main import app
 
-class TestCVParser(unittest.TestCase):
-    """
-    Test suite for cv_parser.py
-    """
+# Instantiate the TestClient
+client = TestClient(app)
 
-    def setUp(self):
-        """
-        Set up test conditions before each test method.
-        This might involve creating temporary dummy CV files with specific content,
-        or preparing sample text strings.
-        """
-        # print("Setting up TestCVParser tests...")
-        # Example: Create a dummy docx file for testing extraction
-        # self.sample_docx_path = "test_sample.docx"
-        # try:
-        #     from docx import Document
-        #     doc = Document()
-        #     doc.add_paragraph("Hello world from DOCX.")
-        #     doc.add_heading("Skills", level=1)
-        #     doc.add_paragraph("Python, Java")
-        #     doc.save(self.sample_docx_path)
-        # except ImportError:
-        #     print("python-docx not installed, skipping dummy docx creation for tests.")
-        #     self.sample_docx_path = None
+# --- Test File Paths ---
+TEST_DIR = PROJECT_ROOT_FOR_TESTS / "test_artifacts" # A dedicated directory for test files
+TEST_CONFIG_JSON = TEST_DIR / "test_config.json"
+TEST_PARSED_CV_JSON = TEST_DIR / "test_parsed_cv.json"
+TEST_DB = TEST_DIR / "test_job_listings.db"
+TEST_LOG_FILE = TEST_DIR / "test_app_backend.log" # main.py will try to create it in PROJECT_ROOT/logs
+ACTUAL_LOG_DIR_IN_MAIN = PROJECT_ROOT_FOR_TESTS / "logs" # As defined in main.py
+ACTUAL_LOG_FILE_IN_MAIN = ACTUAL_LOG_DIR_IN_MAIN / "app_backend.log" # As defined in main.py
+TEST_UPLOADS_DIR = TEST_DIR / "test_cv_uploads"
+DUMMY_CV_FOR_UPLOAD = PROJECT_ROOT_FOR_TESTS / "dummy_cv_for_upload.pdf" # Created in previous step
 
-        # Example: Create a dummy pdf file (more complex, might mock pdfplumber)
-        # self.sample_pdf_path = "test_sample.pdf"
-        # For PDF, actual file creation is harder here, often we'd mock the library
-        # or have pre-made test files.
+# --- Pytest Fixture for Setup & Teardown ---
+@pytest.fixture(scope="function") # "function" scope runs this for each test
+def setup_test_environment(monkeypatch):
+    # Create test artifacts directory if it doesn't exist
+    TEST_DIR.mkdir(parents=True, exist_ok=True)
+    TEST_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # 1. Monkeypatch paths in webapp.backend.main
+    monkeypatch.setattr("webapp.backend.main.PROJECT_ROOT", PROJECT_ROOT_FOR_TESTS) # So that PROJECT_ROOT based paths in main are correct for tests
+    monkeypatch.setattr("webapp.backend.main.CONFIG_FILE_PATH", TEST_CONFIG_JSON)
+    monkeypatch.setattr("webapp.backend.main.PARSED_CV_DATA_PATH", TEST_PARSED_CV_JSON)
+    monkeypatch.setattr("webapp.backend.main.DB_PATH", TEST_DB)
+    
+    # Monkeypatch log file path for main.py AND its global LOG_FILE_PATH if used by handlers
+    # The RotatingFileHandler is set up using LOG_FILE_PATH at module level in main.py.
+    # This means we need to be careful about when it's initialized.
+    # For simplicity, we'll assume the TestClient re-initializes app states or we ensure clean state.
+    # The logging in main.py is configured at module import.
+    # This patching might be tricky if handlers are already set.
+    # A better way would be for main.py's logging to be configurable via function call or env var.
+    # For now, we'll also patch the LOG_DIR and LOG_FILE_PATH that main.py uses for its handler
+    monkeypatch.setattr("webapp.backend.main.LOG_DIR", TEST_DIR) 
+    monkeypatch.setattr("webapp.backend.main.LOG_FILE_PATH", TEST_DIR / "test_app_backend.log")
+    # Re-initialize logging with patched path for file handler (this is a bit of a hack)
+    # This won't work as basicConfig is already called. Proper solution is more complex.
+    # We'll test the log endpoint by checking the ACTUAL_LOG_FILE_IN_MAIN for now,
+    # and accept that test-specific log isolation is hard with current main.py logging setup.
+    # For other file operations, the patching of CONFIG_FILE_PATH etc. is key.
 
-        self.sample_cv_text_simple = """
-Name: Test User
-Email: test@example.com
+    monkeypatch.setattr("webapp.backend.main.CV_UPLOADS_DIR", TEST_UPLOADS_DIR)
 
-Skills
-Python, unittest, pytest
-
-Education
-Test University, B.Sc. Computer Science, 2020
-
-Work Experience
-Software Tester, Test Corp, 2021-Present
-- Wrote many tests.
-        """
-        pass
-
-    def tearDown(self):
-        """
-        Clean up after each test method.
-        e.g., remove temporary files created in setUp.
-        """
-        # print("Tearing down TestCVParser tests...")
-        # if hasattr(self, 'sample_docx_path') and self.sample_docx_path and os.path.exists(self.sample_docx_path):
-        #     os.remove(self.sample_docx_path)
-        # if hasattr(self, 'sample_pdf_path') and self.sample_pdf_path and os.path.exists(self.sample_pdf_path):
-        #     os.remove(self.sample_pdf_path)
-        pass
-
-    # --- Test Text Extraction ---
-    def test_extract_text_from_docx(self):
-        """
-        Test extracting text from a sample DOCX file.
-        - Create a known DOCX file.
-        - Call extract_text_from_docx.
-        - Assert the extracted text matches the known content.
-        """
-        # self.assertTrue(self.sample_docx_path is not None, "Sample DOCX for test not created.")
-        # extracted_text = extract_text_from_docx(self.sample_docx_path)
-        # self.assertIn("Hello world from DOCX", extracted_text)
-        # self.assertIn("Python, Java", extracted_text)
-        self.skipTest("Placeholder: DOCX extraction test not yet implemented.")
-
-    def test_extract_text_from_pdf(self):
-        """
-        Test extracting text from a sample PDF file.
-        - Use a known PDF file or mock pdfplumber.
-        - Call extract_text_from_pdf.
-        - Assert the extracted text matches the known content.
-        """
-        # Placeholder: Requires a sample PDF or mocking pdfplumber
-        self.skipTest("Placeholder: PDF extraction test not yet implemented.")
-
-    # --- Test Section Identification (from parse_cv) ---
-    def test_identify_sections_simple(self):
-        """
-        Test section identification with a clear, simple CV layout.
-        - Use self.sample_cv_text_simple.
-        - Call parse_cv.
-        - Check if the correct sections (Skills, Education, Work Experience) were identified.
-        """
-        # parsed_data = parse_cv(self.sample_cv_text_simple, 'text')
-        # self.assertIn("Skills", parsed_data_keys_or_log_output) # Exact check depends on parse_cv output
-        # self.assertIn("Education", parsed_data_keys_or_log_output)
-        # self.assertIn("Work Experience", parsed_data_keys_or_log_output)
-        self.skipTest("Placeholder: Section identification (simple) test not yet implemented.")
-
-    def test_identify_sections_variant_headings(self):
-        """
-        Test with slightly different but common section headings.
-        e.g., "Professional Experience" vs "Work Experience", "Technical Skills" vs "Skills".
-        - Create sample text with variant headings.
-        - Call parse_cv.
-        - Assert that sections are still correctly identified and mapped.
-        """
-        # sample_text = "..." (with "Professional Experience" and "Technical Skills")
-        # parsed_data = parse_cv(sample_text, 'text')
-        # self.assertTrue(parsed_data['work_experience'] is not None or similar check)
-        # self.assertTrue(parsed_data['skills'] is not None or similar check)
-        self.skipTest("Placeholder: Variant headings test not yet implemented.")
-
-    def test_identify_sections_missing_sections(self):
-        """
-        Test graceful handling if some expected sections are not present in the CV.
-        - Create sample text missing, e.g., an "Education" section.
-        - Call parse_cv.
-        - Ensure the function doesn't crash and the output reflects the missing section (e.g., empty list for education).
-        """
-        # sample_text = "..." (missing Education section)
-        # parsed_data = parse_cv(sample_text, 'text')
-        # self.assertEqual(parsed_data.get('education', []), []) # Or however missing sections are represented
-        self.skipTest("Placeholder: Missing sections test not yet implemented.")
-
-    # --- Test Detailed Parsing (Conceptual - these will be more complex) ---
-    # These tests will depend heavily on the implemented parsing logic for each section.
-
-    # Skills Parsing
-    def test_parse_skills_comma_separated(self):
-        """Test parsing skills listed as 'Python, Java, C++'."""
-        self.skipTest("Placeholder: Skills (comma-separated) parsing test not yet implemented.")
-
-    def test_parse_skills_bullet_points(self):
-        """Test parsing skills listed as bullet points."""
-        self.skipTest("Placeholder: Skills (bullet points) parsing test not yet implemented.")
-
-    def test_parse_skills_mixed_format(self):
-        """Test parsing skills in a mixed format (e.g., categories, then lists)."""
-        self.skipTest("Placeholder: Skills (mixed) parsing test not yet implemented.")
-
-    # Education Parsing
-    def test_parse_education_single_entry(self):
-        """Test parsing a single education entry."""
-        self.skipTest("Placeholder: Education (single entry) parsing test not yet implemented.")
-
-    def test_parse_education_multiple_entries(self):
-        """Test parsing multiple education entries."""
-        self.skipTest("Placeholder: Education (multiple entries) parsing test not yet implemented.")
-
-    def test_parse_education_date_formats(self):
-        """Test parsing various date formats for graduation (e.g., May 2020, 2020-05, Present)."""
-        self.skipTest("Placeholder: Education (date formats) parsing test not yet implemented.")
-
-    # Work Experience Parsing
-    def test_parse_work_experience_single_job(self):
-        """Test parsing a single job entry."""
-        self.skipTest("Placeholder: Work Experience (single job) parsing test not yet implemented.")
-
-    def test_parse_work_experience_date_parsing(self):
-        """Test parsing job start/end dates, including 'Present'."""
-        self.skipTest("Placeholder: Work Experience (date parsing) test not yet implemented.")
-
-    def test_parse_work_experience_responsibilities(self):
-        """Test extracting job responsibilities (e.g., bullet points)."""
-        self.skipTest("Placeholder: Work Experience (responsibilities) parsing test not yet implemented.")
-
-    # --- Test Full CV Parsing and JSON Output ---
-    def test_parse_cv_and_save_json_output(self):
-        """
-        Test the overall parse_cv and save_parsed_data pipeline.
-        - Use a comprehensive sample CV text.
-        - Call parse_cv.
-        - Call save_parsed_data.
-        - Load the saved JSON file.
-        - Compare its structure and content against an expected dictionary.
-        """
-        # output_json_path = "test_full_cv_output.json"
-        # parsed_data = parse_cv(self.sample_cv_text_simple, 'text') # Use a more complex sample
-        # save_parsed_data(parsed_data, output_json_path)
-        # self.assertTrue(os.path.exists(output_json_path))
-        # with open(output_json_path, 'r') as f:
-        #     saved_json = json.load(f)
-        # self.assertEqual(saved_json.get('skills'), expected_skills_structure) # Define expected_...
-        # os.remove(output_json_path) # Clean up
-        self.skipTest("Placeholder: Full CV to JSON output test not yet implemented.")
+    # Also patch paths used by cv_parser.py and scraper.py if they define their own PROJECT_ROOT
+    # cv_parser.py uses config_file_path.parent to determine project_root for CV paths.
+    # scraper.py defines its own PROJECT_ROOT.
+    monkeypatch.setattr("scraper.PROJECT_ROOT", PROJECT_ROOT_FOR_TESTS)
+    monkeypatch.setattr("scraper.CONFIG_FILE_PATH", TEST_CONFIG_JSON)
+    monkeypatch.setattr("scraper.DB_FILE_PATH", TEST_DB)
+    # cv_parser.py's process_cv_from_config is called with absolute paths by main.py, so it should be fine.
 
 
-class TestAgent(unittest.TestCase):
-    """
-    Test suite for agent.py
-    """
-    def setUp(self):
-        """
-        Set up test conditions, e.g., creating dummy config.json and parsed_cv_data.json
-        for testing loading logic.
-        """
-        # print("Setting up TestAgent tests...")
-        self.test_config_path = "test_temp_config.json"
-        self.test_cv_data_path = "test_temp_cv_data.json"
+    # 2. Create dummy files and DB
+    initial_config_data = {
+        "personal_info": {"full_name": "Test User", "email": "test@example.com", "address": {"country": "USA"}},
+        "job_preferences": {"desired_roles": ["Test Engineer"], "target_locations": ["Test City"]},
+        "cv_paths": {"pdf": "", "docx": ""}, # Initially empty
+        "application_settings": {}
+    }
+    with open(TEST_CONFIG_JSON, 'w') as f:
+        json.dump(initial_config_data, f, indent=2)
 
-        # Create a valid dummy config for success tests
-        self.valid_config_data = {
-            "personal_info": {"full_name": "Test Agent User"},
-            "cv_paths": {"pdf": "dummy.pdf"}
-        }
-        with open(self.test_config_path, 'w') as f:
-            json.dump(self.valid_config_data, f)
+    with open(TEST_PARSED_CV_JSON, 'w') as f: # Empty initial parsed CV
+        json.dump({}, f)
 
-        # Create valid dummy CV data for success tests
-        self.valid_cv_data = {"skills": {"programming": ["Python", "Java"]}, "education": []}
-        with open(self.test_cv_data_path, 'w') as f:
-            json.dump(self.valid_cv_data, f)
-            
-        self.malformed_json_path = "test_malformed.json"
-        with open(self.malformed_json_path, 'w') as f:
-            f.write("{'invalid_json': True,") # Malformed JSON
+    # Create an empty DB with schema for job_listings
+    # We need to import database_setup logic or replicate it here for the test DB
+    # For simplicity, we assume database_setup.py can be called on a specific DB path
+    # This requires database_setup.py to be adaptable or run it manually on TEST_DB
+    conn = sqlite3.connect(TEST_DB)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS jobs (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT NOT NULL, location TEXT,
+        date_posted TEXT, description_text TEXT NOT NULL, job_url TEXT NOT NULL UNIQUE,
+        application_url TEXT, source TEXT NOT NULL, scraped_timestamp TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'new'
+    );
+    """)
+    conn.commit()
+    conn.close()
+    
+    # Ensure the actual log directory (used by main.py before patching for tests) exists
+    ACTUAL_LOG_DIR_IN_MAIN.mkdir(parents=True, exist_ok=True)
+    if ACTUAL_LOG_FILE_IN_MAIN.exists():
+         ACTUAL_LOG_FILE_IN_MAIN.unlink() # Clean up actual log file before test run
+    (TEST_DIR / "test_app_backend.log").touch() # Create the test log file
 
-    def tearDown(self):
-        """
-        Clean up temporary files.
-        """
-        # print("Tearing down TestAgent tests...")
-        for path in [self.test_config_path, self.test_cv_data_path, self.malformed_json_path]:
-            if os.path.exists(path):
-                os.remove(path)
+    yield # This is where the test runs
 
-    # --- Test Config Loading (from agent.py's load_json_file) ---
-    def test_load_config_success(self):
-        """Test successfully loading a valid config.json."""
-        # data = load_json_file(self.test_config_path)
-        # self.assertIsNotNone(data)
-        # self.assertEqual(data['personal_info']['full_name'], "Test Agent User")
-        self.skipTest("Placeholder: Config loading (success) test not yet implemented.") # Requires load_json_file import
-
-    def test_load_config_file_not_found(self):
-        """Test handling of a missing config.json."""
-        # data = load_json_file("non_existent_config.json")
-        # self.assertIsNone(data) # Expect None and an error message (captured via mock print or logging)
-        self.skipTest("Placeholder: Config loading (file not found) test not yet implemented.")
-
-    def test_load_config_json_error(self):
-        """Test handling of a config.json with invalid JSON format."""
-        # data = load_json_file(self.malformed_json_path)
-        # self.assertIsNone(data) # Expect None and an error message
-        self.skipTest("Placeholder: Config loading (JSON error) test not yet implemented.")
-
-    # --- Test Parsed CV Data Loading (from agent.py's load_json_file) ---
-    def test_load_parsed_cv_data_success(self):
-        """Test successfully loading valid parsed_cv_data.json."""
-        # data = load_json_file(self.test_cv_data_path)
-        # self.assertIsNotNone(data)
-        # self.assertEqual(data['skills']['programming'], ["Python", "Java"])
-        self.skipTest("Placeholder: CV data loading (success) test not yet implemented.")
-
-    def test_load_parsed_cv_data_file_not_found(self):
-        """Test handling of a missing parsed_cv_data.json."""
-        # data = load_json_file("non_existent_cv_data.json")
-        # self.assertIsNone(data)
-        self.skipTest("Placeholder: CV data loading (file not found) test not yet implemented.")
-
-    def test_load_parsed_cv_data_json_error(self):
-        """Test handling of parsed_cv_data.json with invalid JSON."""
-        # data = load_json_file(self.malformed_json_path) # Re-use malformed for this test
-        # self.assertIsNone(data)
-        self.skipTest("Placeholder: CV data loading (JSON error) test not yet implemented.")
+    # 4. Teardown: Remove all created test files and directories
+    if TEST_CONFIG_JSON.exists(): TEST_CONFIG_JSON.unlink()
+    if TEST_PARSED_CV_JSON.exists(): TEST_PARSED_CV_JSON.unlink()
+    if TEST_DB.exists(): TEST_DB.unlink()
+    if (TEST_DIR / "test_app_backend.log").exists(): (TEST_DIR / "test_app_backend.log").unlink()
+    if TEST_UPLOADS_DIR.exists(): shutil.rmtree(TEST_UPLOADS_DIR)
+    # Don't remove TEST_DIR itself if other files might be there, or do it if it's exclusive.
+    # For now, just removing specific files. If TEST_DIR is exclusive, rmtree it.
+    # Check if TEST_DIR is empty, then remove
+    if TEST_DIR.exists() and not any(TEST_DIR.iterdir()):
+        TEST_DIR.rmdir()
 
 
-if __name__ == '__main__':
-    # To run tests from the command line:
-    # python tests.py
-    unittest.main(verbosity=2)
+# --- Test Cases ---
+
+# Test /api/config Endpoints
+def test_get_config(setup_test_environment):
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    with open(TEST_CONFIG_JSON, 'r') as f:
+        expected_config = json.load(f)
+    assert response.json() == expected_config
+
+def test_update_config(setup_test_environment):
+    new_config_data = {
+        "personal_info": {"full_name": "Updated User"},
+        "job_preferences": {"desired_roles": ["QA Engineer"]},
+        "cv_paths": {"pdf": "new_cv.pdf"},
+        "application_settings": {"dark_mode": True}
+    }
+    response = client.post("/api/config", json=new_config_data)
+    assert response.status_code == 200
+    assert response.json() == {"message": "Configuration updated successfully."}
+    
+    with open(TEST_CONFIG_JSON, 'r') as f:
+        saved_config = json.load(f)
+    assert saved_config == new_config_data
+
+# Test /api/cv/* Endpoints
+def test_upload_cv(setup_test_environment):
+    assert DUMMY_CV_FOR_UPLOAD.exists(), "Dummy CV for upload must exist"
+    with open(DUMMY_CV_FOR_UPLOAD, "rb") as cv_file:
+        response = client.post(
+            "/api/cv/upload",
+            files={"file": (DUMMY_CV_FOR_UPLOAD.name, cv_file, "application/pdf")}
+        )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["message"] == "CV uploaded and configuration updated successfully."
+    assert response_data["filename"] == DUMMY_CV_FOR_UPLOAD.name
+    
+    # Check if file exists in the (monkeypatched) uploads directory
+    expected_upload_path_in_test_dir = TEST_UPLOADS_DIR / DUMMY_CV_FOR_UPLOAD.name
+    assert expected_upload_path_in_test_dir.exists()
+
+    # Check if config was updated
+    with open(TEST_CONFIG_JSON, 'r') as f:
+        config = json.load(f)
+    
+    # Construct expected path relative to PROJECT_ROOT_FOR_TESTS for comparison
+    expected_path_in_config = str((TEST_UPLOADS_DIR / DUMMY_CV_FOR_UPLOAD.name).relative_to(PROJECT_ROOT_FOR_TESTS))
+    assert config["cv_paths"]["pdf"] == expected_path_in_config
+
+@pytest.mark.xfail(reason="Background task testing is complex without more infrastructure/mocking.")
+def test_trigger_cv_parsing_and_get_data(setup_test_environment):
+    # 1. Upload a CV first (using the upload logic)
+    with open(DUMMY_CV_FOR_UPLOAD, "rb") as cv_file_obj:
+        upload_response = client.post("/api/cv/upload", files={"file": (DUMMY_CV_FOR_UPLOAD.name, cv_file_obj, "application/pdf")})
+    assert upload_response.status_code == 200
+    
+    # 2. Trigger parsing
+    response_parse = client.post("/api/cv/parse")
+    assert response_parse.status_code == 200
+    assert response_parse.json() == {"message": "CV parsing initiated in the background. Check server logs for status."}
+
+    # 3. Wait for parsing (this is fragile)
+    time.sleep(3) # Give it a few seconds to process
+
+    # 4. Check for parsed data
+    assert TEST_PARSED_CV_JSON.exists(), "Parsed CV JSON file was not created."
+    response_get_data = client.get("/api/cv/data")
+    assert response_get_data.status_code == 200
+    parsed_data = response_get_data.json()
+    assert "summary" in parsed_data # Basic check for some expected structure
+    # A more robust check would be against expected content from DUMMY_CV_FOR_UPLOAD
+
+def test_get_parsed_cv_data_not_found(setup_test_environment):
+    if TEST_PARSED_CV_JSON.exists():
+        TEST_PARSED_CV_JSON.unlink() # Ensure it doesn't exist
+    response = client.get("/api/cv/data")
+    assert response.status_code == 404
+
+# Test /api/jobs/* Endpoints
+@pytest.mark.xfail(reason="Background task for scraping and reliance on external services make this complex.")
+def test_trigger_job_scraping(setup_test_environment):
+    # This test assumes jobspy might be mocked in future or run against test servers.
+    # For now, it will hit live services if not mocked.
+    # Also, scraper.py uses its own PROJECT_ROOT to find config and DB.
+    # Ensure TEST_CONFIG_JSON has some roles for scraper.
+    with open(TEST_CONFIG_JSON, 'r') as f:
+        config = json.load(f)
+    config["job_preferences"]["desired_roles"] = ["Test Scraping Role"]
+    config["job_preferences"]["target_locations"] = ["Test Scraping City"]
+    with open(TEST_CONFIG_JSON, 'w') as f:
+        json.dump(config, f)
+
+    response = client.post("/api/jobs/scrape")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Job scraping process initiated in the background. Check server logs for status and summary."}
+    
+    time.sleep(10) # Scraping can take time; this is very fragile.
+
+    conn = sqlite3.connect(TEST_DB)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM jobs")
+    count = cursor.fetchone()[0]
+    conn.close()
+    assert count > 0 # Expect some jobs to be inserted if scraping worked
+
+def test_list_jobs_empty(setup_test_environment):
+    response = client.get("/api/jobs")
+    assert response.status_code == 200
+    assert response.json() == []
+
+def test_list_jobs_with_data_and_filters(setup_test_environment):
+    conn = sqlite3.connect(TEST_DB)
+    cursor = conn.cursor()
+    # Insert some test data
+    jobs_data = [
+        ("url1", "Software Engineer", "Tech Corp", "New York, NY", "2023-01-01", "Desc1", "url1", None, "linkedin", datetime.now().isoformat(), "new"),
+        ("url2", "Data Scientist", "Data Inc", "New York, NY", "2023-01-02", "Desc2", "url2", None, "indeed", datetime.now().isoformat(), "applied"),
+        ("url3", "Software Engineer", "Another LLC", "Remote", "2023-01-03", "Desc3", "url3", None, "linkedin", datetime.now().isoformat(), "new"),
+    ]
+    cursor.executemany("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)", jobs_data)
+    conn.commit()
+    conn.close()
+
+    # Test without filters
+    response = client.get("/api/jobs")
+    assert response.status_code == 200
+    assert len(response.json()) == 3
+
+    # Test with title filter
+    response = client.get("/api/jobs?title=Software")
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert all("Software Engineer" in job["title"] for job in response.json())
+
+    # Test with location filter
+    response = client.get("/api/jobs?location=New%20York") # URL encoded space
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+    # Test with source filter
+    response = client.get("/api/jobs?source=indeed")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["source"] == "indeed"
+    
+    # Test with status filter
+    response = client.get("/api/jobs?status=applied")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["status"] == "applied"
+
+    # Test pagination
+    response = client.get("/api/jobs?page=1&limit=1")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    response = client.get("/api/jobs?page=2&limit=1")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_get_job_detail(setup_test_environment):
+    job_id = "test_url_detail"
+    conn = sqlite3.connect(TEST_DB)
+    cursor = conn.cursor()
+    job_data = (job_id, "Detail Job", "Detail Corp", "Remote", "2023-01-04", "Detail Desc", job_id, None, "other", datetime.now().isoformat(), "new")
+    cursor.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)", job_data)
+    conn.commit()
+    conn.close()
+
+    response = client.get(f"/api/jobs/{job_id}")
+    assert response.status_code == 200
+    assert response.json()["id"] == job_id
+    assert response.json()["title"] == "Detail Job"
+
+def test_get_job_detail_not_found(setup_test_environment):
+    response = client.get("/api/jobs/nonexistenturl")
+    assert response.status_code == 404
+
+
+# Test /api/logs Endpoint
+def test_get_logs(setup_test_environment):
+    # This test will check the ACTUAL_LOG_FILE_IN_MAIN due to complexities in patching live handlers
+    # Ensure some logs are written by other actions or write dummy lines here.
+    # For this test, we'll rely on logs generated by other test client calls.
+    
+    # Make a few API calls to generate some logs
+    client.get("/")
+    client.get("/api/config")
+
+    # Now try to get logs
+    response = client.get("/api/logs?lines=5") # Ask for 5 lines
+    assert response.status_code == 200
+    log_data = response.json()
+    assert "logs" in log_data
+    assert isinstance(log_data["logs"], list)
+    # The exact content is hard to assert without knowing what previous tests logged to the *actual* file
+    # but we can check if it returned some lines.
+    # This test is more of an integration test for the logging setup and endpoint.
+    # If the actual log file (ACTUAL_LOG_FILE_IN_MAIN) was cleaned before this test run,
+    # then these logs should be from the client.get calls made within this test.
+    # If the test environment is truly isolated by the fixture, then the patched log file
+    # (TEST_DIR / "test_app_backend.log") should be checked.
+    # The current setup_test_environment attempts to patch main.LOG_FILE_PATH, so we should check that.
+    
+    test_log_path = TEST_DIR / "test_app_backend.log" # The patched path
+    # If logging was successfully redirected to the test log path by monkeypatching main.LOG_FILE_PATH
+    # *before* the handler was created (which happens on main.py import).
+    # This is tricky. The current fixture touches this file.
+    # Let's write directly to the patched log file for this test to be certain.
+    
+    with open(test_log_path, 'a') as f: # Use the patched log path
+        f.write("Test log line 1 for /api/logs\n")
+        f.write("Test log line 2 for /api/logs\n")
+        f.write("Test log line 3 for /api/logs\n")
+        f.write("Test log line 4 for /api/logs\n")
+        f.write("Test log line 5 for /api/logs\n")
+        f.write("Test log line 6 for /api/logs\n")
+
+    response_after_write = client.get("/api/logs?lines=5")
+    assert response_after_write.status_code == 200
+    log_data_after_write = response_after_write.json()
+    assert len(log_data_after_write["logs"]) <= 5 # Should be at most 5
+    assert "Test log line 6 for /api/logs" in log_data_after_write["logs"][-1] # Last line
+    assert "Test log line 2 for /api/logs" in log_data_after_write["logs"][0] # First of the last 5 (if 6 total)
+
+
+# Placeholder for other tests if needed
+# e.g., test_get_config_not_found, test_update_config_invalid_data (with Pydantic)
+
+from datetime import datetime # Already imported but good for explicitness for the jobs_data variable

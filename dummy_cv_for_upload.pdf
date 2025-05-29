@@ -1,0 +1,4 @@
+This is a dummy PDF file for testing uploads.
+Content does not need to be actual PDF content for this test.
+We are primarily testing the upload mechanism and config update.
+Actual parsing is tested elsewhere or via the parsing endpoint.
