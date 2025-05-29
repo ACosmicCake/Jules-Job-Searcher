@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+# Add other backend dependencies here as we identify them
+# For example:
+# pydantic
+# sqlalchemy
+# psycopg2-binary (if using PostgreSQL)
+# python-jose[cryptography] (for JWT auth)

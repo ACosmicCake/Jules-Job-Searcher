@@ -6,7 +6,13 @@
     "linkedin_url": "https://www.linkedin.com/in/johndoe",
     "portfolio_url": "https://johndoe.example.com",
     "github_url": "https://github.com/johndoe",
-    "address": "123 Main St, Anytown, USA"
+    "address": {
+      "street": "123 Main St",
+      "city": "Anytown",
+      "state": "CA",
+      "zip_code": "90210",
+      "country": "USA"
+    }
   },
   "job_preferences": {
     "desired_roles": ["Software Engineer", "Data Scientist"],
