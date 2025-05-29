@@ -1,79 +1,93 @@
 import json
+import logging # Added for agent-specific logging
+import scraper # To use scraper's functions
+
+# Configure logging for the agent if not already configured by another module at a higher level
+# This will also affect scraper's logging if scraper doesn't reconfigure.
+# Ensure consistent logging format.
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+
 
 def load_json_file(file_path):
     """
     Loads a JSON file and returns its content as a Python dictionary.
-
-    Args:
-        file_path (str): The path to the JSON file.
-
-    Returns:
-        dict or None: The loaded JSON data as a dictionary, 
-                      or None if an error occurs.
+    (This is agent's own utility, kept separate from scraper's config loading for now)
     """
     try:
         with open(file_path, 'r') as f:
             data = json.load(f)
         return data
     except FileNotFoundError:
-        print(f"Error: The file '{file_path}' was not found.")
+        logging.error(f"Agent: File '{file_path}' not found.")
         return None
     except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from the file '{file_path}'. Check its format.")
+        logging.error(f"Agent: Could not decode JSON from '{file_path}'. Check format.")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred while loading '{file_path}': {e}")
+        logging.error(f"Agent: Unexpected error loading '{file_path}': {e}")
         return None
 
-if __name__ == "__main__":
-    print("AI Agent starting...")
-
-    # Load configuration file
-    config_data = load_json_file("config.json")
-
-    # Load parsed CV data 
-    # Note: 'parsed_cv_data.json' might not exist initially or might be created by cv_parser.py
-    # For initial testing of agent.py, we might need to create a dummy 'parsed_cv_data.json'
-    # or ensure cv_parser.py has run and created it.
-    # The 'test_output.json' created by cv_parser.py's test block is a good candidate for temporary use.
-    # For this task, we'll try to load 'parsed_cv_data.json' as specified.
-    structured_cv_data = load_json_file("parsed_cv_data.json") 
-                                        # or "test_output.json" for immediate testing if cv_parser.py's main was run
-
-    if config_data and structured_cv_data:
-        print(f"\nWelcome, {config_data.get('personal_info', {}).get('full_name', 'User')}!")
-        print("Configuration data loaded successfully.")
+def run_job_search():
+    """
+    Initiates the job scraping and storing process.
+    """
+    logging.info("Agent: Job search process initiated via agent.")
+    
+    # Load configuration using scraper's function, as scraper needs it in a specific way
+    # This assumes scraper.load_config() is the source of truth for scraper's operational config
+    scraper_config_data = scraper.load_config() # Uses default "config.json"
+    
+    if scraper_config_data:
+        logging.info("Agent: Scraper configuration loaded successfully.")
+        # scraper.fetch_jobs() already handles fetching and storing, and internal logging.
+        # It returns the DataFrame of fetched jobs, or None/empty DataFrame on failure.
+        fetched_jobs_df = scraper.fetch_jobs(scraper_config_data)
         
-        print("Structured CV data loaded successfully.")
-        # Example of accessing CV data (add more specific examples once cv_parser populates it robustly)
-        if 'skills' in structured_cv_data and structured_cv_data['skills']:
-            # This is a placeholder, actual skill structure might differ
-            first_skill_category = list(structured_cv_data['skills'].keys())[0] if isinstance(structured_cv_data['skills'], dict) and structured_cv_data['skills'] else "N/A"
-            if first_skill_category != "N/A" :
-                 print(f"For example, a skill category found in your CV is: {first_skill_category}")
-            else:
-                 print("CV skills section is present but might be empty or not in expected format yet.")
+        if fetched_jobs_df is not None and not fetched_jobs_df.empty:
+            logging.info(f"Agent: Job search process completed. {len(fetched_jobs_df)} jobs were processed by the scraper.")
+            # Further actions with fetched_jobs_df could be done here if needed by the agent directly.
+        elif fetched_jobs_df is not None and fetched_jobs_df.empty:
+            logging.info("Agent: Job search process completed. No new jobs were found or fetched by the scraper.")
+        else: # implies None was returned by fetch_jobs
+            logging.info("Agent: Job search process completed, but an issue occurred (fetch_jobs returned None). See scraper logs for details.")
+    else:
+        logging.error("Agent: Failed to load scraper configuration. Job search cannot proceed.")
 
-        elif 'name' in structured_cv_data: # From the test_output.json example
-            print(f"Found name in CV data: {structured_cv_data['name']}")
+
+if __name__ == "__main__":
+    logging.info("AI Agent starting...")
+
+    # Load agent's primary configuration (could be the same config.json or a different one)
+    # For this task, we assume config.json is the shared source.
+    # The agent might use this for its own settings, while scraper uses its loaded version.
+    agent_main_config = load_json_file("config.json")
+
+    # Load parsed CV data (remains from original agent.py functionality)
+    structured_cv_data = load_json_file("parsed_cv_data.json") 
+
+    if agent_main_config:
+        logging.info(f"Agent: Welcome, {agent_main_config.get('personal_info', {}).get('full_name', 'User')}!")
+        logging.info("Agent: Main configuration data loaded successfully.")
+        
+        if structured_cv_data:
+            logging.info("Agent: Structured CV data loaded successfully.")
+            # Example access as before
+            if 'skills' in structured_cv_data and structured_cv_data['skills']:
+                first_skill_category = list(structured_cv_data['skills'].keys())[0] if isinstance(structured_cv_data['skills'], dict) and structured_cv_data['skills'] else "N/A"
+                if first_skill_category != "N/A" :
+                     logging.info(f"Agent: Example skill category from CV: {first_skill_category}")
         else:
-            print("CV data is loaded, but specific example fields (like skills or name) are not available in the current data.")
+            logging.info("Agent: Structured CV data ('parsed_cv_data.json') failed to load or not found.")
+            logging.info("Agent: CV-related functionalities might be limited.")
 
-        # Further agent logic would go here
-        print("\nAgent is ready to proceed with its tasks.")
+        # --- Triggering the job search process ---
+        logging.info("Agent: Proceeding to run job search...")
+        run_job_search()
+        # --- End of job search trigger ---
 
-    elif config_data and not structured_cv_data:
-        print(f"\nWelcome, {config_data.get('personal_info', {}).get('full_name', 'User')}!")
-        print("Configuration data loaded successfully.")
-        print("However, structured CV data ('parsed_cv_data.json') failed to load or was not found.")
-        print("Please ensure 'cv_parser.py' has been run successfully to generate this file.")
-        print("Agent functionality related to CV content will be limited.")
-        # Agent might proceed with limited functionality or wait.
+        logging.info("Agent: Primary tasks, including job search attempt, are complete.")
 
-    else: # Handles if config_data is None, or both are None
-        print("\nFailed to load necessary configuration data ('config.json').")
-        if not structured_cv_data:
-            print("Structured CV data ('parsed_cv_data.json') also failed to load or was not found.")
-        print("Agent cannot proceed without critical configuration.")
+    else: 
+        logging.error("Agent: Failed to load critical configuration ('config.json'). Agent cannot perform main functions.")
 
-    print("\nAI Agent finished.")
+    logging.info("AI Agent finished.")

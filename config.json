@@ -21,10 +21,10 @@
     "willing_to_relocate": true
   },
   "cv_paths": {
-    "pdf": "/path/to/cv.pdf",
-    "docx": "/path/to/cv.docx"
+    "pdf": "dummy_cv.pdf",
+    "docx": "dummy_cv.docx"
   },
-  "cover_letter_template_path": "/path/to/cover_letter_template.txt",
+  "cover_letter_template_path": "cover_letter_template.txt",
   "application_settings": {
     "default_resume_format_to_use": "pdf",
     "skip_jobs_requiring_cover_letter": false

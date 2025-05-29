@@ -1,0 +1,29 @@
+# SQLite database files
+job_listings.db
+job_listings.db-journal
+job_listings.db-wal
+job_listings.db-shm
+
+# Python virtual environment folder
+venv/
+*.venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# IDE settings and temporary files (common examples)
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Test outputs (if any are generated and not cleaned up)
+# For example, if tests create files like test_output.json outside a specific test_artifacts dir
+# test_output.json 
+# coverage.xml
+# .coverage
+
+# Generated files (example, if scraper saved a CSV)
+# fetched_jobs.csv
