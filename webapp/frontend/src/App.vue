@@ -1,30 +1,71 @@
-<script setup>
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
+  <div id="app-container">
+    <header>
+      <h1>AI Job Agent Dashboard</h1>
+    </header>
+    <main>
+      <ConfigEditor />
+      <!-- Other components will be added here later, e.g., for CV management, Job Listings -->
+    </main>
+    <footer>
+      <p>&copy; 2024 AI Job Agent</p>
+    </footer>
   </div>
-  <HelloWorld msg="Vite + Vue" />
 </template>
 
-<style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
+<script setup>
+import ConfigEditor from './components/ConfigEditor.vue';
+// HelloWorld component is no longer used by default, so no need to import unless specifically needed.
+// import HelloWorld from './components/HelloWorld.vue' 
+</script>
+
+<style>
+/* Global styles or App-specific styles */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: #f4f6f8;
+  color: #333;
 }
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
+
+#app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
+
+header {
+  background-color: #2c3e50;
+  color: white;
+  padding: 1rem 2rem;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.8em;
+}
+
+main {
+  flex-grow: 1;
+  padding: 20px;
+  max-width: 1200px; /* Max width for main content area */
+  margin: 0 auto; /* Center content */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+footer {
+  text-align: center;
+  padding: 1rem;
+  background-color: #34495e;
+  color: #ecf0f1;
+  font-size: 0.9em;
+}
+
+/* Basic styling for components - can be moved to a global CSS or scoped */
+h2 {
+  color: #2c3e50;
 }
 </style>
