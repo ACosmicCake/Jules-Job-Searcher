@@ -1,0 +1,32 @@
+{
+  "personal_info": {
+    "full_name": "John Doe",
+    "email": "john.doe@example.com",
+    "phone": "123-456-7890",
+    "linkedin_url": "https://www.linkedin.com/in/johndoe",
+    "portfolio_url": "https://johndoe.example.com",
+    "github_url": "https://github.com/johndoe",
+    "address": "123 Main St, Anytown, USA"
+  },
+  "job_preferences": {
+    "desired_roles": ["Software Engineer", "Data Scientist"],
+    "target_locations": ["New York, NY", "San Francisco, CA"],
+    "salary_expectation_min": 80000,
+    "salary_expectation_max": 120000,
+    "salary_expectation_currency": "USD",
+    "job_types": ["Full-time", "Contract"],
+    "company_size_preferences": ["Medium", "Large"],
+    "industries_of_interest": ["Technology", "Finance"],
+    "work_authorization_status": "US Citizen",
+    "willing_to_relocate": true
+  },
+  "cv_paths": {
+    "pdf": "/path/to/cv.pdf",
+    "docx": "/path/to/cv.docx"
+  },
+  "cover_letter_template_path": "/path/to/cover_letter_template.txt",
+  "application_settings": {
+    "default_resume_format_to_use": "pdf",
+    "skip_jobs_requiring_cover_letter": false
+  }
+}
