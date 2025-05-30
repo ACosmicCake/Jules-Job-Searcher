@@ -234,6 +234,37 @@ async def trigger_job_scraping_api(background_tasks: BackgroundTasks):
     logger_main.info("API: Job scraping task added to background.")
     return {"message": "Job scraping process initiated in the background. Check server logs for status and summary."}
 
+# New Synchronous Scraping Endpoint (as requested)
+@app.get("/api/scrape-jobs", response_model=Dict[str, Any])
+async def scrape_jobs_endpoint():
+    """
+    Triggers the job scraping and storing process directly and waits for completion.
+    Returns a summary of the scraping operation.
+    """
+    logger_main.info("API: /api/scrape-jobs endpoint called.")
+    if not scraper_imported:
+        logger_main.error("API: Scraper module not available for /api/scrape-jobs.")
+        raise HTTPException(status_code=500, detail="Job Scraper module not available.")
+    
+    try:
+        logger_main.info("API: Calling run_scraping_and_storing directly for /api/scrape-jobs...")
+        # FastAPI will run this synchronous function in a threadpool
+        summary = run_scraping_and_storing() 
+        logger_main.info(f"API: run_scraping_and_storing completed for /api/scrape-jobs. Summary: {summary}")
+        
+        # Check the summary for errors reported by the scraper itself
+        if summary.get("status") == "failed" or summary.get("errors"):
+            # Optionally, could raise HTTPException based on summary content,
+            # but for now, returning the scraper's own error summary is informative.
+            logger_main.warning(f"API: Scraping process reported errors: {summary.get('errors')}")
+            # Consider if a 500 error is more appropriate if summary indicates critical failure
+            # For now, returning the summary as is.
+        
+        return summary
+    except Exception as e:
+        logger_main.error(f"API: Unexpected error calling run_scraping_and_storing for /api/scrape-jobs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during job scraping: {str(e)}")
+
 @app.get("/api/jobs", response_model=List[Dict[str, Any]])
 async def list_jobs_api(title: Optional[str]=None, location: Optional[str]=None, source: Optional[str]=None, status: Optional[str]=None, page: int=1, limit: int=20):
     # ... (content unchanged)
