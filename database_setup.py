@@ -1,19 +1,19 @@
 import sqlite3
 import datetime
 
-def create_jobs_table(db_name="job_listings.db"):
+def create_jobs_table(db_path="job_listings.db"): # Renamed db_name to db_path
     """
     Creates the 'jobs' table in the SQLite database if it doesn't already exist.
     The table schema includes columns for job details and metadata.
     Indexes are created for efficient querying.
 
     Args:
-        db_name (str): The name of the database file. Defaults to "job_listings.db".
+        db_path (str): The path to the database file. Defaults to "job_listings.db".
     """
     conn = None  # Initialize conn to None
     try:
         # Connect to the SQLite database (creates the file if it doesn't exist)
-        conn = sqlite3.connect(db_name)
+        conn = sqlite3.connect(db_path) # Use db_path
         cursor = conn.cursor()
 
         # Check if the table already exists
@@ -21,7 +21,7 @@ def create_jobs_table(db_name="job_listings.db"):
         table_exists = cursor.fetchone()
 
         if table_exists:
-            print(f"Table 'jobs' already exists in '{db_name}'. No schema changes applied if it exists.")
+            print(f"Table 'jobs' already exists in '{db_path}'. No schema changes applied if it exists.") # Use db_path
         else:
             # Define the SQL CREATE TABLE statement
             # Using IF NOT EXISTS for robustness, though the outer check handles it too.
@@ -44,7 +44,7 @@ def create_jobs_table(db_name="job_listings.db"):
             );
             """
             cursor.execute(create_table_sql)
-            print(f"Table 'jobs' created successfully (or already existed with IF NOT EXISTS) in '{db_name}'.")
+            print(f"Table 'jobs' created successfully (or already existed with IF NOT EXISTS) in '{db_path}'.") # Use db_path
 
             # Create indexes IF NOT EXISTS
             print("Creating indexes (if they don't exist)...")
@@ -62,11 +62,11 @@ def create_jobs_table(db_name="job_listings.db"):
         # Close the connection
         if conn:
             conn.close()
-            # print(f"Database connection to '{db_name}' closed.")
+            # print(f"Database connection to '{db_path}' closed.") # Use db_path (optional print)
 
 if __name__ == "__main__":
     print("Setting up database...")
     # Get current timestamp for scraped_timestamp (example, not used in table creation itself)
     # current_time = datetime.datetime.now().isoformat()
-    create_jobs_table()
+    create_jobs_table(db_path="job_listings.db") # Explicitly use db_path
     print("Database setup process finished.")
