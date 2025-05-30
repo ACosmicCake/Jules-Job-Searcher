@@ -21,11 +21,12 @@ def create_jobs_table(db_name="job_listings.db"):
         table_exists = cursor.fetchone()
 
         if table_exists:
-            print(f"Table 'jobs' already exists in '{db_name}'.")
+            print(f"Table 'jobs' already exists in '{db_name}'. No schema changes applied if it exists.")
         else:
             # Define the SQL CREATE TABLE statement
+            # Using IF NOT EXISTS for robustness, though the outer check handles it too.
             create_table_sql = """
-            CREATE TABLE jobs (
+            CREATE TABLE IF NOT EXISTS jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_site_id TEXT UNIQUE,
                 title TEXT,
@@ -43,16 +44,16 @@ def create_jobs_table(db_name="job_listings.db"):
             );
             """
             cursor.execute(create_table_sql)
-            print(f"Table 'jobs' created successfully in '{db_name}'.")
+            print(f"Table 'jobs' created successfully (or already existed with IF NOT EXISTS) in '{db_name}'.")
 
-            # Create indexes
-            print("Creating indexes...")
-            cursor.execute("CREATE INDEX idx_job_site_id ON jobs (job_site_id);")
-            cursor.execute("CREATE INDEX idx_job_url ON jobs (job_url);")
-            cursor.execute("CREATE INDEX idx_date_posted ON jobs (date_posted);")
-            print("Indexes created successfully.")
+            # Create indexes IF NOT EXISTS
+            print("Creating indexes (if they don't exist)...")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_site_id ON jobs (job_site_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_url ON jobs (job_url);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_date_posted ON jobs (date_posted);")
+            print("Indexes created successfully (or already existed).")
 
-        # Commit the changes
+        # Commit the changes, important even if only creating indexes on existing table
         conn.commit()
 
     except sqlite3.Error as e:

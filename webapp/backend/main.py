@@ -44,14 +44,28 @@ except ImportError as e:
     logger_main.error(f"Failed to import from cv_parser: {e}. Ensure cv_parser.py is in PYTHONPATH.")
 
 try:
-    from scraper import run_scraping_and_storing 
+    from scraper import run_scraping_and_storing, load_scraper_config # Added load_scraper_config
+    from database_setup import create_jobs_table # For startup event
     scraper_imported = True
-    logger_main.info("Successfully imported scraper.run_scraping_and_storing")
+    logger_main.info("Successfully imported from scraper and database_setup.")
 except ImportError as e:
-    logger_main.error(f"Failed to import from scraper: {e}. Ensure scraper.py is in PYTHONPATH.")
+    logger_main.error(f"Failed to import from scraper or database_setup: {e}. Ensure .py files are in PYTHONPATH.")
+    # Set to None if import fails, to be checked in endpoints
+    run_scraping_and_storing = None 
+    load_scraper_config = None
+    create_jobs_table = None
 
 
 app = FastAPI(title="AI Job Agent API")
+
+@app.on_event("startup")
+async def startup_event():
+    logger_main.info("Application startup: Initializing database...")
+    if create_jobs_table:
+        create_jobs_table(db_path=DB_PATH) # Use DB_PATH from main.py
+        logger_main.info("Database initialization complete.")
+    else:
+        logger_main.error("Could not initialize database: create_jobs_table function not imported.")
 
 # --- CORS Middleware Configuration ---
 origins = [
@@ -234,64 +248,107 @@ async def trigger_job_scraping_api(background_tasks: BackgroundTasks):
     logger_main.info("API: Job scraping task added to background.")
     return {"message": "Job scraping process initiated in the background. Check server logs for status and summary."}
 
-# New Synchronous Scraping Endpoint (as requested)
-@app.get("/api/scrape-jobs", response_model=Dict[str, Any])
-async def scrape_jobs_endpoint():
+# Pydantic model for scrape request
+from pydantic import BaseModel
+class ScrapeRequest(BaseModel):
+    results_wanted: Optional[int] = None
+    hours_old: Optional[int] = None
+
+# Modified Scrape Jobs Endpoint (POST, with overrides)
+# Changed path from /api/scrape-jobs to /scrape-jobs/ to match subtask
+@app.post("/scrape-jobs/", response_model=Dict[str, Any]) 
+async def scrape_jobs_endpoint_post(request_params: ScrapeRequest = None):
     """
-    Triggers the job scraping and storing process directly and waits for completion.
+    Triggers the job scraping and storing process synchronously.
+    Accepts optional 'results_wanted' and 'hours_old' to override config for this run.
     Returns a summary of the scraping operation.
     """
-    logger_main.info("API: /api/scrape-jobs endpoint called.")
-    if not scraper_imported:
-        logger_main.error("API: Scraper module not available for /api/scrape-jobs.")
-        raise HTTPException(status_code=500, detail="Job Scraper module not available.")
-    
+    logger_main.info(f"API: POST /scrape-jobs/ endpoint called with params: {request_params}")
+    if not run_scraping_and_storing or not load_scraper_config:
+        logger_main.error("API: Scraper functions (run_scraping_and_storing or load_scraper_config) not available.")
+        raise HTTPException(status_code=500, detail="Job Scraper components not available.")
+
     try:
-        logger_main.info("API: Calling run_scraping_and_storing directly for /api/scrape-jobs...")
-        # FastAPI will run this synchronous function in a threadpool
-        summary = run_scraping_and_storing() 
-        logger_main.info(f"API: run_scraping_and_storing completed for /api/scrape-jobs. Summary: {summary}")
+        # Load base configuration from scraper's own loader
+        config_override = load_scraper_config() 
+        if not config_override:
+            logger_main.error("API: Failed to load base configuration for scraping.")
+            raise HTTPException(status_code=500, detail="Could not load base scraping configuration.")
+
+        # Override with request parameters if provided
+        if request_params:
+            if request_params.results_wanted is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['results_wanted'] = request_params.results_wanted
+                logger_main.info(f"API: Overriding 'results_wanted' to {request_params.results_wanted}")
+            if request_params.hours_old is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['hours_old'] = request_params.hours_old
+                logger_main.info(f"API: Overriding 'hours_old' to {request_params.hours_old}")
         
-        # Check the summary for errors reported by the scraper itself
+        logger_main.info("API: Calling run_scraping_and_storing with potentially overridden config...")
+        summary = run_scraping_and_storing(config_override=config_override)
+        logger_main.info(f"API: run_scraping_and_storing completed. Summary: {summary}")
+        
         if summary.get("status") == "failed" or summary.get("errors"):
-            # Optionally, could raise HTTPException based on summary content,
-            # but for now, returning the scraper's own error summary is informative.
             logger_main.warning(f"API: Scraping process reported errors: {summary.get('errors')}")
-            # Consider if a 500 error is more appropriate if summary indicates critical failure
-            # For now, returning the summary as is.
         
         return summary
     except Exception as e:
-        logger_main.error(f"API: Unexpected error calling run_scraping_and_storing for /api/scrape-jobs: {e}", exc_info=True)
+        logger_main.error(f"API: Unexpected error calling run_scraping_and_storing for /scrape-jobs/: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred during job scraping: {str(e)}")
 
-@app.get("/api/jobs", response_model=List[Dict[str, Any]])
-async def list_jobs_api(title: Optional[str]=None, location: Optional[str]=None, source: Optional[str]=None, status: Optional[str]=None, page: int=1, limit: int=20):
-    # ... (content unchanged)
+# Modified Get Jobs Endpoint
+@app.get("/jobs/", response_model=List[Dict[str, Any]]) # Changed path from /api/jobs to /jobs/
+async def list_jobs_api(
+    title: Optional[str] = None, 
+    location: Optional[str] = None, 
+    source: Optional[str] = None, 
+    status: Optional[str] = None, 
+    skip: int = 0,  # Changed from page to skip
+    limit: int = 100 # Default limit 100 as per subtask
+):
     conn = get_db_conn_for_api()
     if not conn:
         raise HTTPException(status_code=503, detail="Database service unavailable.")
     try:
         cursor = conn.cursor()
         base_query = "SELECT * FROM jobs"
-        count_query = "SELECT COUNT(*) FROM jobs"
+        # count_query = "SELECT COUNT(*) FROM jobs" # Count query can be added if total is needed in response
         conditions = []
         params = []
+        
+        # Filtering logic (remains the same)
         if title: conditions.append("title LIKE ?"); params.append(f"%{title}%")
         if location: conditions.append("location LIKE ?"); params.append(f"%{location}%")
         if source: conditions.append("source LIKE ?"); params.append(f"%{source}%")
         if status: conditions.append("status = ?"); params.append(status)
+        
         if conditions:
             base_query += " WHERE " + " AND ".join(conditions)
-            count_query += " WHERE " + " AND ".join(conditions)
-        cursor.execute(count_query, tuple(params))
-        # total_count = cursor.fetchone()[0] 
+            # count_query += " WHERE " + " AND ".join(conditions)
+            
         base_query += " ORDER BY scraped_timestamp DESC, date_posted DESC"
-        offset = (page - 1) * limit
-        base_query += f" LIMIT {limit} OFFSET {offset}"
+        # Applied skip and limit as per subtask
+        base_query += f" LIMIT ? OFFSET ?"
+        params.extend([limit, skip])
+        
         cursor.execute(base_query, tuple(params))
         jobs_rows = cursor.fetchall()
-        return [dict(row) for row in jobs_rows]
+        
+        # Process rows to convert emails string to list
+        processed_jobs = []
+        for row in jobs_rows:
+            job_dict = dict(row)
+            if job_dict.get("emails") and isinstance(job_dict["emails"], str):
+                try:
+                    job_dict["emails"] = json.loads(job_dict["emails"])
+                except json.JSONDecodeError:
+                    logger_main.warning(f"Could not parse emails JSON string for job ID {job_dict.get('id')}: {job_dict['emails']}")
+                    # Keep as string if parsing fails, or set to None/empty list
+            processed_jobs.append(job_dict)
+            
+        return processed_jobs
     except sqlite3.Error as e:
         logger_main.error(f"API: Database error while listing jobs: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Database query error.")

@@ -41,6 +41,26 @@
     <div v-else-if="!isLoading && !configData && !errorMessage">
         <p>No configuration data loaded, or an error occurred preventing display.</p>
     </div>
+
+    <div class="scrape-parameters-section">
+      <h3>Manual Scrape Parameters</h3>
+      <div class="scrape-inputs">
+        <div class="input-group">
+          <label for="resultsWanted">Results Wanted:</label>
+          <input type="number" id="resultsWanted" v-model.number="resultsWanted" placeholder="e.g., 20">
+        </div>
+        <div class="input-group">
+          <label for="hoursOld">Hours Old:</label>
+          <input type="number" id="hoursOld" v-model.number="hoursOld" placeholder="e.g., 72">
+        </div>
+      </div>
+      <button @click="triggerScrapeWithParams" :disabled="isLoading" class="button-scrape">
+        {{ isLoading ? 'Scraping...' : 'Scrape Jobs with Parameters' }}
+      </button>
+      <div v-if="scrapeStatusMessage" :class="{'success-message': isScrapeSuccess, 'error-message': !isScrapeSuccess}" class="scrape-status-message">
+        {{ scrapeStatusMessage }}
+      </div>
+    </div>
   </div>
 </template>
 
@@ -52,8 +72,15 @@ const configData = ref(null); // Stores the object representation
 const editableJsonString = ref(''); // Stores the string representation for textarea
 const isLoading = ref(false);
 const errorMessage = ref('');
-const successMessage = ref('');
+const successMessage = ref(''); // For config save/load
 const isJsonValid = ref(true);
+
+// Reactive variables for new scrape parameters
+const resultsWanted = ref(20); 
+const hoursOld = ref(72);
+const scrapeStatusMessage = ref(''); // For displaying scrape status
+const isScrapeSuccess = ref(false);
+
 
 // Fetch initial configuration
 const fetchConfig = async () => {
@@ -128,6 +155,31 @@ watch(editableJsonString, (newValue) => {
 onMounted(() => {
   fetchConfig();
 });
+
+// Function to trigger scraping with parameters
+const triggerScrapeWithParams = async () => {
+  isLoading.value = true;
+  scrapeStatusMessage.value = '';
+  isScrapeSuccess.value = false;
+  try {
+    const params = {
+      results_wanted: resultsWanted.value,
+      hours_old: hoursOld.value,
+    };
+    // Assuming api.js will have a method like triggerScrapingWithParams
+    const response = await api.triggerScrapingWithParams(params); 
+    scrapeStatusMessage.value = `Scraping initiated successfully. ${response.data?.message || ''} Jobs processed: ${response.data?.total_jobs_processed_from_fetch || 'N/A'}, New: ${response.data?.new_jobs_added || 'N/A'}`;
+    isScrapeSuccess.value = true;
+    // console.log('Scraping triggered:', response.data);
+  } catch (error) {
+    console.error('Failed to trigger scraping:', error);
+    scrapeStatusMessage.value = error.response?.data?.detail || error.message || 'Failed to trigger scraping.';
+    isScrapeSuccess.value = false;
+  } finally {
+    isLoading.value = false; // Consider a separate isLoadingScrape if needed
+  }
+};
+
 </script>
 
 <style scoped>
@@ -237,5 +289,71 @@ textarea {
     color: #d8000c;
     font-size: 0.8em;
     margin-left: 10px;
+}
+
+/* Styles for new scrape parameters section */
+.scrape-parameters-section {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.scrape-parameters-section h3 {
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.scrape-inputs {
+  display: flex;
+  gap: 20px; /* Spacing between input groups */
+  margin-bottom: 15px;
+  align-items: center;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column; /* Stack label on top of input */
+}
+
+.input-group label {
+  margin-bottom: 5px;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.input-group input[type="number"] {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95em;
+  width: 150px; /* Adjust as needed */
+}
+
+.button-scrape {
+  background-color: #ff8c00; /* Orange */
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: background-color 0.3s ease;
+  margin-top: 10px; /* Add some space above the button */
+}
+
+.button-scrape:hover {
+  background-color: #e07b00;
+}
+
+.button-scrape:disabled {
+  background-color: #ffcc80;
+  cursor: not-allowed;
+}
+
+.scrape-status-message {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 4px;
+  text-align: center;
 }
 </style>

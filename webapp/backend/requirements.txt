@@ -10,6 +10,7 @@ pdfplumber
 # Job Scraping
 python-jobspy
 pandas
+dateparser
 
 # Utility script dependencies (e.g., for generate_dummy_pdf.py)
 reportlab 

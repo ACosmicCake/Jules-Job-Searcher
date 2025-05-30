@@ -137,7 +137,8 @@ def store_jobs_in_db(job_data_list: list[dict], conn: sqlite3.Connection) -> tup
         salary_text = str(salary_raw) if salary_raw is not None else None # Store raw salary string
         
         job_type = job.get("job_type")
-        scraped_timestamp = datetime.now().isoformat()
+        # Use scraped_timestamp from fetched data if available, else generate new
+        scraped_timestamp = job.get("scraped_timestamp", datetime.now().isoformat())
         status = 'new'  # Default status
 
         # Ensure job_url is present if it's part of the unique constraint
@@ -196,6 +197,11 @@ def fetch_raw_jobs(config: dict) -> list[dict]:
     job_prefs = config.get('job_preferences', {})
     personal_info = config.get('personal_info', {}) # For country_indeed logic
 
+    # Load new scraping parameters with defaults
+    results_wanted_config = job_prefs.get('results_wanted', 20)
+    hours_old_config = job_prefs.get('hours_old', 72)
+    logger.info(f"Scraper: Using results_wanted={results_wanted_config}, hours_old={hours_old_config} from config/defaults.")
+
     desired_roles = job_prefs.get('desired_roles')
     target_locations = job_prefs.get('target_locations')
 
@@ -207,7 +213,9 @@ def fetch_raw_jobs(config: dict) -> list[dict]:
         return []
 
     all_jobs_data: list[dict] = []
-    sites_to_scrape = ["indeed", "linkedin", "zip_recruiter", "glassdoor"]
+    # sites_to_scrape = ["indeed", "linkedin", "zip_recruiter", "glassdoor"] # Original
+    sites_to_scrape = ["indeed", "linkedin"] # As per subtask example
+    logger.info(f"Scraper: Targeting sites: {sites_to_scrape}")
 
     # Determine country_indeed based on personal_info (once, if applicable to all searches)
     # Or adjust if it needs to be per role/location if config supports such granularity
@@ -227,18 +235,27 @@ def fetch_raw_jobs(config: dict) -> list[dict]:
                     site_name=sites_to_scrape,
                     search_term=role,
                     location=loc,
-                    results_wanted=25,
-                    hours_old=72, # Look for jobs posted in the last 3 days
-                    country_indeed=country_indeed_setting,
-                    linkedin_fetch_description=False, # Faster, description can be fetched later if needed
+                    results_wanted=results_wanted_config,
+                    hours_old=hours_old_config,
+                    country_indeed=country_indeed_setting, # Default "USA" or from config
+                    linkedin_fetch_description=True,    # Changed to True as per subtask
                     verbose_level=0 # Minimize jobspy's own console output
                 )
 
                 if jobs_df is not None and not jobs_df.empty:
+                    # Convert DataFrame to list of dictionaries
                     jobs_list = jobs_df.to_dict(orient='records')
+                    
+                    # Add scraped_timestamp to each job entry at the time of fetching
+                    # This timestamp will be used by store_jobs_in_db
                     timestamp_now = datetime.now().isoformat()
-                    for job_dict in jobs_list:
-                        job_dict['scraped_timestamp'] = timestamp_now
+                    for job_entry in jobs_list:
+                        job_entry['scraped_timestamp'] = timestamp_now
+                        # Other specific field mapping mentioned in subtask (like job_id, salary)
+                        # are handled by store_jobs_in_db based on JobSpy's direct output.
+                        # For example, job_site_id in store_jobs_in_db uses job.get("id").
+                        # Salary in store_jobs_in_db uses str(job.get("salary")).
+                    
                     all_jobs_data.extend(jobs_list)
                     logger.info(f"Scraper: Found {len(jobs_list)} jobs for role '{role}' in '{loc}'.")
                 elif jobs_df is not None and jobs_df.empty:
@@ -318,24 +335,26 @@ def run_scraping_and_storing(config_override: dict = None) -> dict:
     return summary
 
 
+from database_setup import create_jobs_table # Import the function
+
 if __name__ == "__main__":
-    logger.info("Scraper script started for direct execution.")
-    # Example of direct execution:
-    # result_summary = run_scraping_and_storing()
-    # logger.info(f"Direct execution summary: {result_summary}")
+    logger.info("Scraper script started for direct execution: Ensuring database schema and then running full scraping and storing process.")
     
-    # The old main block for just fetching and printing:
-    config = load_scraper_config()
-    if config:
-        job_list = fetch_raw_jobs(config) # fetch_raw_jobs now returns a list of dicts
-        if job_list: # Check if the list is not empty
-            logger.info(f"--- Total jobs fetched by scraper (direct run): {len(job_list)} ---")
-            logger.info("--- Sample of fetched jobs (first 5, direct run): ---")
-            for i, job_item in enumerate(job_list[:5]):
-                print(f"Job {i+1}: {job_item.get('title', 'N/A')} at {job_item.get('company', 'N/A')}")
-        else:
-            logger.info("No jobs were fetched (direct run) or an error occurred in fetch_raw_jobs.")
-    else:
-        logger.error("Could not load configuration for direct run. Scraping aborted.")
-        
+    # Ensure database schema is up to date
+    logger.info("Initializing/Verifying database schema...")
+    create_jobs_table(DB_FILE_PATH) # Use the DB_FILE_PATH defined in scraper.py
+    logger.info("Database schema initialization/verification complete.")
+
+    result_summary = run_scraping_and_storing()
+    
+    logger.info(f"--- Direct execution summary ---")
+    logger.info(f"Status: {result_summary.get('status')}")
+    logger.info(f"Total Jobs Processed from Fetch: {result_summary.get('total_jobs_processed_from_fetch')}")
+    logger.info(f"New Jobs Added to DB: {result_summary.get('new_jobs_added')}")
+    logger.info(f"Duplicate/Ignored Jobs: {result_summary.get('duplicate_ignored_jobs')}")
+    if result_summary.get('errors'):
+        logger.error("Errors encountered during the process:")
+        for error_msg in result_summary['errors']:
+            logger.error(f"- {error_msg}")
+            
     logger.info("Scraper script direct execution finished.")

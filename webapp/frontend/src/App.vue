@@ -5,7 +5,8 @@
     </header>
     <main>
       <ConfigEditor />
-      <!-- Other components will be added here later, e.g., for CV management, Job Listings -->
+      <JobList /> 
+      <!-- Other components will be added here later, e.g., for CV management -->
     </main>
     <footer>
       <p>&copy; 2024 AI Job Agent</p>
@@ -15,6 +16,7 @@
 
 <script setup>
 import ConfigEditor from './components/ConfigEditor.vue';
+import JobList from './components/JobList.vue'; // Import the JobList component
 // HelloWorld component is no longer used by default, so no need to import unless specifically needed.
 // import HelloWorld from './components/HelloWorld.vue' 
 </script>
