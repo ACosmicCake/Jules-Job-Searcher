@@ -213,8 +213,12 @@ def fetch_raw_jobs(config: dict) -> list[dict]:
         return []
 
     all_jobs_data: list[dict] = []
-    # sites_to_scrape = ["indeed", "linkedin", "zip_recruiter", "glassdoor"] # Original
-    sites_to_scrape = ["indeed", "linkedin"] # As per subtask example
+
+    # Retrieve sites_to_scrape from config, with a default
+    default_sites = ["indeed", "linkedin"]
+    sites_to_scrape = job_prefs.get('sites_to_scrape', default_sites)
+    if sites_to_scrape == default_sites and 'sites_to_scrape' not in job_prefs:
+        logger.info(f"Scraper: 'sites_to_scrape' not found in config's job_preferences. Using default sites: {default_sites}")
     logger.info(f"Scraper: Targeting sites: {sites_to_scrape}")
 
     # Determine country_indeed based on personal_info (once, if applicable to all searches)
@@ -364,19 +368,18 @@ if __name__ == "__main__":
     # This is a temporary modification for this testing block.
     # Ideally, site selection would also be part of the config.
     original_sites_to_scrape = None
-    if 'fetch_raw_jobs' in globals():
-        original_sites_to_scrape = fetch_raw_jobs.__globals__.get('sites_to_scrape', None)
-        fetch_raw_jobs.__globals__['sites_to_scrape'] = ["indeed"] # Temporarily override global within function's scope
-        logger.info("Temporarily overriding sites_to_scrape to ['indeed'] for this test run.")
-
+    # The temporary override logic for sites_to_scrape in __main__ is no longer needed
+    # as fetch_raw_jobs now gets it from config.
+    # If a specific site list is needed for the __main__ test, it should be part of test_config_override.
+    # For example, adding to test_config_override["job_preferences"]:
+    # "sites_to_scrape": ["indeed"]
+    # However, the subtask is about refactoring fetch_raw_jobs, not __main__.
+    # So, removing the direct manipulation of fetch_raw_jobs.__globals__.
+    # The test_config_override could be updated if specific sites are needed for the main block test.
+    # For now, this part is simplified to reflect that fetch_raw_jobs is self-contained regarding site list.
 
     result_summary = run_scraping_and_storing(config_override=test_config_override)
     
-    # Restore original sites_to_scrape if it was changed
-    if original_sites_to_scrape is not None and 'fetch_raw_jobs' in globals():
-        fetch_raw_jobs.__globals__['sites_to_scrape'] = original_sites_to_scrape
-        logger.info("Restored original sites_to_scrape.")
-
     logger.info(f"--- Direct execution summary (TEST MODE - MINIMAL CONFIG) ---")
     logger.info(f"Status: {result_summary.get('status')}")
     logger.info(f"Total Jobs Processed from Fetch: {result_summary.get('total_jobs_processed_from_fetch')}")

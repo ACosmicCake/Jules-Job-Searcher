@@ -74,7 +74,11 @@ def setup_test_environment(monkeypatch):
     # 2. Create dummy files and DB
     initial_config_data = {
         "personal_info": {"full_name": "Test User", "email": "test@example.com", "address": {"country": "USA"}},
-        "job_preferences": {"desired_roles": ["Test Engineer"], "target_locations": ["Test City"]},
+        "job_preferences": {
+            "desired_roles": ["Test Engineer"],
+            "target_locations": ["Test City"],
+            "sites_to_scrape": ["indeed_test_site"] # Added for scraper config test
+        },
         "cv_paths": {"pdf": "", "docx": ""}, # Initially empty
         "application_settings": {}
     }
@@ -90,12 +94,23 @@ def setup_test_environment(monkeypatch):
     # This requires database_setup.py to be adaptable or run it manually on TEST_DB
     conn = sqlite3.connect(TEST_DB)
     cursor = conn.cursor()
+    # Schema aligned with database_setup.py
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS jobs (
-        id TEXT PRIMARY KEY, title TEXT NOT NULL, company TEXT NOT NULL, location TEXT,
-        date_posted TEXT, description_text TEXT NOT NULL, job_url TEXT NOT NULL UNIQUE,
-        application_url TEXT, source TEXT NOT NULL, scraped_timestamp TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'new'
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_site_id TEXT UNIQUE,
+        title TEXT,
+        company TEXT,
+        location TEXT,
+        date_posted TEXT,
+        job_url TEXT UNIQUE,
+        description_text TEXT,
+        source TEXT,
+        emails TEXT,
+        salary_text TEXT,
+        job_type TEXT,
+        scraped_timestamp TEXT,
+        status TEXT DEFAULT 'new'
     );
     """)
     conn.commit()
@@ -236,69 +251,126 @@ def test_list_jobs_empty(setup_test_environment):
 def test_list_jobs_with_data_and_filters(setup_test_environment):
     conn = sqlite3.connect(TEST_DB)
     cursor = conn.cursor()
-    # Insert some test data
+    # Insert some test data - aligned with new 14-column schema
+    # id, job_site_id, title, company, location, date_posted, job_url, description_text, source, emails, salary_text, job_type, scraped_timestamp, status
+    current_time = datetime.now().isoformat()
     jobs_data = [
-        ("url1", "Software Engineer", "Tech Corp", "New York, NY", "2023-01-01", "Desc1", "url1", None, "linkedin", datetime.now().isoformat(), "new"),
-        ("url2", "Data Scientist", "Data Inc", "New York, NY", "2023-01-02", "Desc2", "url2", None, "indeed", datetime.now().isoformat(), "applied"),
-        ("url3", "Software Engineer", "Another LLC", "Remote", "2023-01-03", "Desc3", "url3", None, "linkedin", datetime.now().isoformat(), "new"),
+        (1, "site_id_1", "Software Engineer", "Tech Corp", "New York, NY", "2023-01-01", "url1_unique", "Desc1", "linkedin", '["test1@example.com"]', "100k-120k", "Full-time", current_time, "new"),
+        (2, "site_id_2", "Data Scientist", "Data Inc", "New York, NY", "2023-01-02", "url2_unique", "Desc2", "indeed", None, "120k-150k", "Full-time", current_time, "applied"),
+        (3, "site_id_3", "Software Engineer", "Another LLC", "Remote", "2023-01-03", "url3_unique", "Desc3", "linkedin", '[]', None, "Contract", current_time, "new"),
     ]
-    cursor.executemany("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)", jobs_data)
+    cursor.executemany("INSERT INTO jobs (id, job_site_id, title, company, location, date_posted, job_url, description_text, source, emails, salary_text, job_type, scraped_timestamp, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", jobs_data)
     conn.commit()
     conn.close()
 
     # Test without filters
-    response = client.get("/api/jobs")
+    response = client.get("/jobs/") # UPDATED PATH
     assert response.status_code == 200
     assert len(response.json()) == 3
 
     # Test with title filter
-    response = client.get("/api/jobs?title=Software")
+    response = client.get("/jobs/?title=Software") # UPDATED PATH
     assert response.status_code == 200
     assert len(response.json()) == 2
     assert all("Software Engineer" in job["title"] for job in response.json())
 
     # Test with location filter
-    response = client.get("/api/jobs?location=New%20York") # URL encoded space
+    response = client.get("/jobs/?location=New%20York") # UPDATED PATH & URL encoded space
     assert response.status_code == 200
     assert len(response.json()) == 2
 
     # Test with source filter
-    response = client.get("/api/jobs?source=indeed")
+    response = client.get("/jobs/?source=indeed") # UPDATED PATH
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["source"] == "indeed"
     
     # Test with status filter
-    response = client.get("/api/jobs?status=applied")
+    response = client.get("/jobs/?status=applied") # UPDATED PATH
     assert response.status_code == 200
     assert len(response.json()) == 1
     assert response.json()[0]["status"] == "applied"
 
-    # Test pagination
-    response = client.get("/api/jobs?page=1&limit=1")
+    # Test pagination with skip and limit
+    # Reminder: Data inserted: (1, "site_id_1", ...), (2, "site_id_2", ...), (3, "site_id_3", ...)
+
+    # Get first record (limit 1, skip 0)
+    response = client.get("/jobs/?limit=1&skip=0") # UPDATED PATH & PARAMS
     assert response.status_code == 200
-    assert len(response.json()) == 1
-    response = client.get("/api/jobs?page=2&limit=1")
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == 1
+    assert data[0]["job_site_id"] == "site_id_1"
+
+    # Get second record (limit 1, skip 1)
+    response = client.get("/jobs/?limit=1&skip=1") # UPDATED PATH & PARAMS
     assert response.status_code == 200
-    assert len(response.json()) == 1
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == 2
+    assert data[0]["job_site_id"] == "site_id_2"
+
+    # Get first two records (limit 2, skip 0)
+    response = client.get("/jobs/?limit=2&skip=0") # UPDATED PATH & PARAMS
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["id"] == 1
+    assert data[1]["id"] == 2
+
+    # Get last two records (limit 2, skip 1)
+    response = client.get("/jobs/?limit=2&skip=1") # UPDATED PATH & PARAMS
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["id"] == 2
+    assert data[1]["id"] == 3
+
+    # Get third record (limit 1, skip 2)
+    response = client.get("/jobs/?limit=1&skip=2") # UPDATED PATH & PARAMS
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == 3
+    assert data[0]["job_site_id"] == "site_id_3"
+
+    # Try to get records beyond the existing ones (limit 1, skip 3)
+    response = client.get("/jobs/?limit=1&skip=3") # UPDATED PATH & PARAMS
+    assert response.status_code == 200
+    assert len(response.json()) == 0
+
+    # Try to get records with a large limit but skip some (limit 5, skip 1)
+    response = client.get("/jobs/?limit=5&skip=1") # UPDATED PATH & PARAMS
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2 # Should return 2nd and 3rd items
+    assert data[0]["id"] == 2
+    assert data[1]["id"] == 3
 
 
 def test_get_job_detail(setup_test_environment):
-    job_id = "test_url_detail"
+    job_id_int = 100  # Use an integer ID
+    job_site_id_text = "test_job_site_id_detail"
+    job_url_text = "test_url_detail_unique"
+    current_time = datetime.now().isoformat()
+
     conn = sqlite3.connect(TEST_DB)
     cursor = conn.cursor()
-    job_data = (job_id, "Detail Job", "Detail Corp", "Remote", "2023-01-04", "Detail Desc", job_id, None, "other", datetime.now().isoformat(), "new")
-    cursor.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)", job_data)
+    # id, job_site_id, title, company, location, date_posted, job_url, description_text, source, emails, salary_text, job_type, scraped_timestamp, status
+    job_data = (job_id_int, job_site_id_text, "Detail Job", "Detail Corp", "Remote", "2023-01-04", job_url_text, "Detail Desc", "other", None, "Confidential", "Full-time", current_time, "new")
+    cursor.execute("INSERT INTO jobs (id, job_site_id, title, company, location, date_posted, job_url, description_text, source, emails, salary_text, job_type, scraped_timestamp, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", job_data)
     conn.commit()
     conn.close()
 
-    response = client.get(f"/api/jobs/{job_id}")
+    response = client.get(f"/api/jobs/{job_id_int}") # Use integer ID for API call
     assert response.status_code == 200
-    assert response.json()["id"] == job_id
+    assert response.json()["id"] == job_id_int # Expect integer ID in response
     assert response.json()["title"] == "Detail Job"
+    assert response.json()["job_site_id"] == job_site_id_text # Check other fields as well
+    assert response.json()["job_url"] == job_url_text
 
 def test_get_job_detail_not_found(setup_test_environment):
-    response = client.get("/api/jobs/nonexistenturl")
+    response = client.get("/api/jobs/99999") # Use an integer ID that likely won't exist
     assert response.status_code == 404
 
 
