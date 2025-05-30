@@ -338,16 +338,46 @@ def run_scraping_and_storing(config_override: dict = None) -> dict:
 from database_setup import create_jobs_table # Import the function
 
 if __name__ == "__main__":
-    logger.info("Scraper script started for direct execution: Ensuring database schema and then running full scraping and storing process.")
+    logger.info("Scraper script started for direct execution (TEST MODE - MINIMAL CONFIG): Ensuring database schema and then running limited scraping.")
     
     # Ensure database schema is up to date
     logger.info("Initializing/Verifying database schema...")
-    create_jobs_table(DB_FILE_PATH) # Use the DB_FILE_PATH defined in scraper.py
+    create_jobs_table(DB_FILE_PATH)
     logger.info("Database schema initialization/verification complete.")
 
-    result_summary = run_scraping_and_storing()
+    # Minimal config for quick testing
+    test_config_override = {
+        "job_preferences": {
+            "desired_roles": ["Software Engineer"],
+            "target_locations": ["New York, NY"],
+            "results_wanted": 0, # ZERO results - should be very fast
+            "hours_old": 168, 
+        },
+        "personal_info": { # Needed for country_indeed logic
+            "address": {"country": "USA"}
+        }
+        # Other config sections like cv_paths, application_settings are not directly used by run_scraping_and_storing
+    }
+    logger.info(f"Using minimal test_config_override: {test_config_override['job_preferences']}")
+
+    # Modify fetch_raw_jobs to use only 'indeed' for speed in this test scenario
+    # This is a temporary modification for this testing block.
+    # Ideally, site selection would also be part of the config.
+    original_sites_to_scrape = None
+    if 'fetch_raw_jobs' in globals():
+        original_sites_to_scrape = fetch_raw_jobs.__globals__.get('sites_to_scrape', None)
+        fetch_raw_jobs.__globals__['sites_to_scrape'] = ["indeed"] # Temporarily override global within function's scope
+        logger.info("Temporarily overriding sites_to_scrape to ['indeed'] for this test run.")
+
+
+    result_summary = run_scraping_and_storing(config_override=test_config_override)
     
-    logger.info(f"--- Direct execution summary ---")
+    # Restore original sites_to_scrape if it was changed
+    if original_sites_to_scrape is not None and 'fetch_raw_jobs' in globals():
+        fetch_raw_jobs.__globals__['sites_to_scrape'] = original_sites_to_scrape
+        logger.info("Restored original sites_to_scrape.")
+
+    logger.info(f"--- Direct execution summary (TEST MODE - MINIMAL CONFIG) ---")
     logger.info(f"Status: {result_summary.get('status')}")
     logger.info(f"Total Jobs Processed from Fetch: {result_summary.get('total_jobs_processed_from_fetch')}")
     logger.info(f"New Jobs Added to DB: {result_summary.get('new_jobs_added')}")

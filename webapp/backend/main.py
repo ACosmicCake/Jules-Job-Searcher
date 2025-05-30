@@ -62,7 +62,7 @@ app = FastAPI(title="AI Job Agent API")
 async def startup_event():
     logger_main.info("Application startup: Initializing database...")
     if create_jobs_table:
-        create_jobs_table(db_name=DB_PATH) # Use DB_PATH from main.py
+        create_jobs_table(db_path=DB_PATH) # Use DB_PATH from main.py
         logger_main.info("Database initialization complete.")
     else:
         logger_main.error("Could not initialize database: create_jobs_table function not imported.")
