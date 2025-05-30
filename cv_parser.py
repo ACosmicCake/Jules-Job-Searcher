@@ -91,7 +91,7 @@ def save_parsed_data(data: dict, output_filename: Path | str) -> bool:
     """Saves the parsed CV data to a JSON file."""
     try:
         output_path = Path(output_filename) 
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
         logger.info(f"Parsed data successfully saved to {output_path}")
         return True
@@ -105,7 +105,7 @@ def load_config_for_cv_parser(config_path: Path | str) -> dict | None:
     """Loads the configuration file for CV parser."""
     try:
         config_file = Path(config_path)
-        with open(config_file, 'r') as f:
+        with open(config_file, 'r', encoding='utf-8') as f:
             config_data = json.load(f)
         logger.info(f"CV Parser: Configuration loaded successfully from '{config_file}'.")
         return config_data

@@ -27,7 +27,7 @@ except ImportError:
 def load_scraper_config(config_path: Path = CONFIG_FILE_PATH) -> dict | None:
     """Loads the configuration file."""
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, 'r', encoding='utf-8') as f:
             config_data = json.load(f)
         logger.info(f"Scraper: Configuration loaded successfully from '{config_path}'.")
         return config_data
@@ -42,7 +42,7 @@ def load_scraper_config(config_path: Path = CONFIG_FILE_PATH) -> dict | None:
         return None
 
 # --- Date Standardization Function ---
-def standardize_date(date_str: str | pd.Timestamp | None) -> str | None:
+def standardize_date(date_str: str | pd.Timestamp | datetime | None) -> str | None: # Added datetime to hint
     """
     Standardizes a date string or pandas Timestamp to 'YYYY-MM-DD' format.
 
@@ -57,15 +57,20 @@ def standardize_date(date_str: str | pd.Timestamp | None) -> str | None:
     if date_str is None:
         return None
 
-    if isinstance(date_str, pd.Timestamp):
+    if isinstance(date_str, datetime): # Handle datetime.datetime first
+        try:
+            return date_str.strftime('%Y-%m-%d')
+        except Exception as e:
+            logger.warning(f"Could not format datetime.datetime object {date_str}: {e}")
+            return None
+    elif isinstance(date_str, pd.Timestamp):
         try:
             return date_str.strftime('%Y-%m-%d')
         except Exception as e:
             logger.warning(f"Could not format pandas Timestamp {date_str}: {e}")
             return None
-
-    if not isinstance(date_str, str):
-        logger.warning(f"Input is not a string or pandas Timestamp: {type(date_str)}. Returning None.")
+    elif not isinstance(date_str, str): # Check if not string after handling other types
+        logger.warning(f"Input is not a string, pandas Timestamp, or datetime object: {type(date_str)}. Returning None.")
         return None
 
     if not date_str.strip(): # Handle empty strings
@@ -100,14 +105,15 @@ def get_scraper_db_connection(db_path: Path = DB_FILE_PATH) -> sqlite3.Connectio
         logger.error(f"Scraper: Error connecting to database '{db_path}': {e}")
         return None
 
-def store_jobs_in_db(job_data_list: list[dict], conn: sqlite3.Connection) -> tuple[int, int]:
+def store_jobs_in_db(job_data_list: list[dict], conn: sqlite3.Connection) -> tuple[int, int, int]: # Corrected type hint
     """
     Stores job listings from a list of dictionaries into the SQLite database.
     Handles field mapping, date standardization, and duplicate skipping.
+    Returns tuple (inserted_count, skipped_count, error_count).
     """
     if not job_data_list:
         logger.info("Scraper: No jobs to store in the database.")
-        return 0, 0  # inserted_count, skipped_count
+        return 0, 0, 0 # inserted_count, skipped_count, error_count
 
     cursor = conn.cursor()
     inserted_count = 0
@@ -180,8 +186,8 @@ def store_jobs_in_db(job_data_list: list[dict], conn: sqlite3.Connection) -> tup
         logger.warning(f"Scraper: Encountered {error_count} errors during job data processing/insertion.")
 
     conn.commit()
-    logger.info(f"Scraper: Database update complete. New jobs inserted: {inserted_count}. Duplicate/skipped jobs: {skipped_count}.")
-    return inserted_count, skipped_count
+    logger.info(f"Scraper: Database update complete. New jobs inserted: {inserted_count}. Duplicate/skipped jobs: {skipped_count}. Errors: {error_count}.")
+    return inserted_count, skipped_count, error_count
 
 
 def fetch_raw_jobs(config: dict) -> list[dict]:
@@ -320,13 +326,25 @@ def run_scraping_and_storing(config_override: dict = None) -> dict:
         return summary
     
     try:
-        # store_jobs_in_db now accepts a list of dicts
-        new_added, ignored = store_jobs_in_db(all_jobs_data, conn)
+        # store_jobs_in_db now accepts a list of dicts and returns 3 values
+        new_added, ignored, db_errors = store_jobs_in_db(all_jobs_data, conn)
         summary["new_jobs_added"] = new_added
         summary["duplicate_ignored_jobs"] = ignored
-        summary["status"] = "success"
-        logger.info("Scraper: Scraping and storing process completed successfully.")
-    except Exception as e:
+        if db_errors > 0:
+            summary["errors"].append(f"{db_errors} errors occurred during database storage.")
+            # Potentially change status if db_errors > 0, but current tests might expect "success" if some jobs are added.
+            # For now, keep status "success" if the operation itself didn't raise an exception here.
+            logger.warning(f"Scraper: {db_errors} errors reported by store_jobs_in_db.")
+
+        # Only set to "success" if no other major error already set it to "failed"
+        if not summary["errors"] and summary["status"] == "started": # Check if status hasn't been set to failed by other issues
+             summary["status"] = "success"
+        elif summary["errors"]: # If there were db_errors
+            summary["status"] = "completed_with_errors"
+
+
+        logger.info("Scraper: Scraping and storing process completed.")
+    except Exception as e: # Catch exceptions from store_jobs_in_db or other issues
         summary["status"] = "failed"
         summary["errors"].append(f"An error occurred during storing jobs: {str(e)}")
         logger.error(f"Scraper: Error during storing jobs: {e}", exc_info=True)

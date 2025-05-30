@@ -244,7 +244,7 @@ def test_trigger_job_scraping(setup_test_environment):
     assert count > 0 # Expect some jobs to be inserted if scraping worked
 
 def test_list_jobs_empty(setup_test_environment):
-    response = client.get("/api/jobs")
+    response = client.get("/jobs/") # UPDATED PATH to match other job list endpoints
     assert response.status_code == 200
     assert response.json() == []
 

@@ -106,14 +106,6 @@ const nextPage = () => {
     // This is a client-side heuristic as backend doesn't send totalJobs
     return; 
   }
-};
-
-const nextPage = () => {
-  if (jobsList.value.length < limit.value) {
-    // Don't go to next page if current page wasn't full (implies no more jobs)
-    // This is a client-side heuristic as backend doesn't send totalJobs
-    return; 
-  }
   skip.value += limit.value;
   fetchJobs();
 };

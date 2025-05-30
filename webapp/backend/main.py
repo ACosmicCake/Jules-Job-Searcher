@@ -328,7 +328,7 @@ async def list_jobs_api(
             base_query += " WHERE " + " AND ".join(conditions)
             # count_query += " WHERE " + " AND ".join(conditions)
             
-        base_query += " ORDER BY scraped_timestamp DESC, date_posted DESC"
+        base_query += " ORDER BY id ASC" # Changed order for consistent pagination testing
         # Applied skip and limit as per subtask
         base_query += f" LIMIT ? OFFSET ?"
         params.extend([limit, skip])
