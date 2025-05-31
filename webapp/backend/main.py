@@ -8,6 +8,7 @@ from typing import Dict, Any, List, Optional
 import shutil
 import os 
 import sqlite3 
+import pdfplumber # Added pdfplumber import
 
 # --- Project Path Definitions ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -225,6 +226,114 @@ async def get_parsed_cv_data_api():
         logger_main.error(f"Error reading or parsing CV data file {PARSED_CV_DATA_PATH}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error reading or parsing CV data file: {str(e)}")
 
+# --- Real PDF Text Extraction ---
+def extract_text_from_pdf(cv_path: Path) -> str:
+    if not cv_path.exists():
+        logger_main.error(f"CV PDF file not found at: {cv_path}")
+        raise FileNotFoundError(f"CV PDF file not found at: {cv_path}")
+    try:
+        text = ""
+        with pdfplumber.open(cv_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n" # Add newline between pages
+        logger_main.info(f"Successfully extracted text from PDF: {cv_path.name}")
+        return text.strip()
+    except Exception as e:
+        logger_main.error(f"Error extracting text from PDF {cv_path}: {e}", exc_info=True)
+        raise  # Re-raise the exception to be caught by the endpoint
+
+# --- Mock function for Gemini CV Generation (to be replaced later) ---
+def call_gemini_cv_generation_mock(cv_text: str, job_description: str) -> bytes:
+    """Placeholder for Gemini API call."""
+    logger_main.info(f"MOCK: Calling Gemini for CV generation with CV text (len: {len(cv_text)}) and Job Description (len: {len(job_description)})")
+    # Simulate PDF byte content
+    return b"%PDF-1.4\n%Dummy PDF content for mock CV generation.\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /MediaBox [0 0 612 792] /Contents 4 0 R /Parent 2 0 R >>\nendobj\n4 0 obj\n<< /Length 50 >>\nstream\nBT\n/F1 24 Tf\n72 720 Td\n(Mock Generated CV) Tj\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000055 00000 n \n0000000113 00000 n \n0000000180 00000 n \n0000000278 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n370\n%%EOF"
+
+@app.post("/api/cv/generate-tailored", response_model=List[Dict[str, Any]])
+async def generate_tailored_cvs_api(request_data: GenerateCVRequest):
+    logger_main.info(f"API: Received request to generate tailored CVs for job IDs: {request_data.job_ids}")
+    results = []
+
+    app_config = await _load_app_config()
+    if not app_config:
+        raise HTTPException(status_code=500, detail="Could not load application configuration.")
+
+    cv_paths = app_config.get('cv_paths', {})
+    # Prioritize PDF, then DOCX, then any other key if available.
+    cv_path_str = cv_paths.get('pdf') or cv_paths.get('docx')
+
+    if not cv_path_str:
+        logger_main.error("API: No CV path found in configuration (cv_paths.pdf or cv_paths.docx).")
+        raise HTTPException(status_code=400, detail="No CV found. Please upload a CV first via /api/cv/upload.")
+
+    # Construct absolute path from project root if path is relative
+    # Ensure cv_path_str is treated as relative to PROJECT_ROOT if it's not already absolute
+    cv_file_path = Path(cv_path_str)
+    if not cv_file_path.is_absolute():
+        cv_file_path = PROJECT_ROOT / cv_file_path
+
+    logger_main.info(f"API: Attempting to use CV from path: {cv_file_path}")
+
+    try:
+        cv_text = extract_text_from_pdf(cv_file_path) # Changed to real function
+    except FileNotFoundError: # Specifically for CV file not found on disk
+        logger_main.error(f"API: CV file configured at '{cv_file_path}' not found on server.")
+        raise HTTPException(status_code=400, detail=f"Configured CV file not found. Please verify CV path or re-upload.")
+    except Exception as e: # Catch other errors from PDF extraction (e.g., corrupted file)
+        logger_main.error(f"API: Error during CV text extraction from {cv_file_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error processing CV file. It might be corrupted or an unsupported format.")
+
+
+    for job_id in request_data.job_ids:
+        job_description_text = None
+        conn = None  # Initialize conn to None
+        try:
+            conn = get_db_conn_for_api()
+            if not conn:
+                results.append({"job_id": job_id, "status": "error", "message": "Database connection failed."})
+                continue
+
+            cursor = conn.cursor()
+            cursor.execute("SELECT description_text FROM jobs WHERE id = ?", (job_id,))
+            job_row = cursor.fetchone()
+
+            if job_row and job_row['description_text']:
+                job_description_text = job_row['description_text']
+            else:
+                logger_main.warning(f"API: Job ID {job_id} not found or has no description.")
+                results.append({"job_id": job_id, "status": "error", "message": "Job not found or no description available."})
+                continue # Skip to next job_id
+        except sqlite3.Error as e:
+            logger_main.error(f"API: Database error for job ID {job_id}: {e}", exc_info=True)
+            results.append({"job_id": job_id, "status": "error", "message": "Database error fetching job details."})
+            continue # Skip to next job_id
+        finally:
+            if conn:
+                conn.close()
+
+        if job_description_text:
+            try:
+                # Mock Gemini API call
+                generated_cv_bytes = call_gemini_cv_generation_mock(cv_text, job_description_text)
+                # For now, just using a mock filename. Actual file handling will be added later.
+                generated_cv_filename = f"generated_cv_for_job_{job_id}.pdf"
+                # logger_main.info(f"MOCK: Generated CV bytes length: {len(generated_cv_bytes)} for job {job_id}")
+
+                results.append({
+                    "job_id": job_id,
+                    "generated_cv_filename": generated_cv_filename,
+                    "status": "success",
+                    "message": "CV generated (mocked)."
+                })
+            except Exception as e:
+                logger_main.error(f"API: Error during mock CV generation for job ID {job_id}: {e}", exc_info=True)
+                results.append({"job_id": job_id, "status": "error", "message": f"Mock CV generation failed: {str(e)}"})
+
+    logger_main.info(f"API: Completed tailored CV generation request. Results: {results}")
+    return results
+
 def scrape_jobs_task_wrapper():
     # ... (content unchanged)
     logger_main.info("Background task: Starting job scraping and storing process.")
@@ -265,6 +374,9 @@ class ScrapeRequest(BaseModel):
     is_remote: Optional[bool] = None
     easy_apply: Optional[bool] = None # For LinkedIn
     description_format: Optional[str] = None # "html" or "markdown"
+
+class GenerateCVRequest(BaseModel):
+    job_ids: List[str]
 
 # Modified Scrape Jobs Endpoint (POST, with overrides)
 # Changed path from /api/scrape-jobs to /scrape-jobs/ to match subtask

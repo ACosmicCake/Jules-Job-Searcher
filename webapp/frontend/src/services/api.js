@@ -60,6 +60,11 @@ export default {
     return apiClient.get(`/jobs/${jobId}`);
   },
 
+  // CV Generation
+  generateTailoredCvs(payload) { // payload = { job_ids: [...] }
+    return apiClient.post('/cv/generate-tailored', payload);
+  },
+
   // Logs (placeholder)
   getLogs(lines = 100) {
     return apiClient.get('/logs', { params: { lines } });

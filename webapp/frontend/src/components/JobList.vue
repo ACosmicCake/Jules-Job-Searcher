@@ -13,10 +13,29 @@
 
     <!-- Global controls removed -->
 
+    <div class="cv-generation-controls">
+      <button @click="navigateToCvGeneration" :disabled="selectedJobIds.length === 0" class="button-generate-cv">
+        Generate CV for Selected Job(s) ({{ selectedJobIds.length }})
+      </button>
+    </div>
+
     <ul v-if="jobsList.length > 0" class="jobs">
       <li v-for="job in jobsList" :key="job.id || job.job_url" class="job-item">
-        <h3>{{ job.title || 'N/A' }}</h3>
-        <p><strong>Company:</strong> {{ job.company || 'N/A' }}</p>
+        <div class="job-selection">
+          <input
+            type="checkbox"
+            :value="job.id"
+            @change="toggleJobSelection(job.id)"
+            :checked="selectedJobIds.includes(job.id)"
+            :id="'job-checkbox-' + job.id"
+            class="job-select-checkbox"
+          />
+          <label :for="'job-checkbox-' + job.id" class="visually-hidden">Select job {{ job.title }}</label>
+        </div>
+        <div class="job-content">
+          <h3>{{ job.title || 'N/A' }}</h3>
+          <p><strong>Company:</strong> {{ job.company || 'N/A' }}</p>
+        </div>
         <p><strong>Location:</strong> {{ job.location || 'N/A' }}</p>
         <p><strong>Date Posted:</strong> {{ formatDate(job.date_posted) }}</p>
         <p><strong>Source:</strong> {{ job.source || 'N/A' }}</p>
@@ -65,9 +84,12 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router'; // Import useRouter
 import api from '../services/api';
 
 const jobsList = ref([]);
+const selectedJobIds = ref([]); // For storing IDs of selected jobs
+const router = useRouter(); // Initialize router
 const isLoading = ref(false);
 const errorMessage = ref('');
 const skip = ref(0);
@@ -151,10 +173,56 @@ onMounted(() => {
 
 // toggleAllDetails method removed
 
+const toggleJobSelection = (jobId) => {
+  const index = selectedJobIds.value.indexOf(jobId);
+  if (index > -1) {
+    selectedJobIds.value.splice(index, 1); // Remove if already selected
+  } else {
+    selectedJobIds.value.push(jobId); // Add if not selected
+  }
+};
+
+const navigateToCvGeneration = () => {
+  if (selectedJobIds.value.length === 0) {
+    // This should ideally not be hit if button is correctly disabled
+    alert("Please select at least one job to generate a CV.");
+    return;
+  }
+  const path = `/generate-cv?job_ids=${selectedJobIds.value.join(',')}`;
+  router.push(path);
+};
+
 </script>
 
 <style scoped>
 /* Global controls styles removed */
+
+/* Styles for the new Generate CV button container */
+.cv-generation-controls {
+  text-align: center; /* Center the button */
+  margin-bottom: 20px; /* Space below the button */
+}
+
+.button-generate-cv {
+  padding: 10px 20px;
+  background-color: #5cb85c; /* Green, for a positive action */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: background-color 0.2s;
+}
+
+.button-generate-cv:hover:not(:disabled) {
+  background-color: #4cae4c;
+}
+
+.button-generate-cv:disabled {
+  background-color: #a9d9a9;
+  cursor: not-allowed;
+}
+
 
 .button-toggle-item {
   padding: 6px 12px;
@@ -246,21 +314,38 @@ h2 {
 }
 
 .job-item {
+  display: flex; /* Enable flexbox for checkbox and content alignment */
+  align-items: flex-start; /* Align items to the top */
   background-color: #fff;
   border: 1px solid #ddd;
   border-radius: 5px;
-  padding: 20px;
+  padding: 15px; /* Adjusted padding */
   margin-bottom: 15px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.job-item h3 {
+.job-selection {
+  margin-right: 15px; /* Space between checkbox and job content */
+  /* The checkbox itself is a small element, further styling if needed */
+}
+.job-select-checkbox {
+  width: 1.3em; /* Make checkbox slightly larger if desired */
+  height: 1.3em;
+  margin-top: 5px; /* Align better with the start of the title */
+}
+
+
+.job-content {
+  flex-grow: 1; /* Allow job content to take remaining space */
+}
+
+.job-content h3 { /* Adjusted from .job-item h3 */
   margin-top: 0;
   color: #2980b9;
   font-size: 1.4em;
 }
 
-.job-item p {
+.job-content p { /* Adjusted from .job-item p */
   margin: 8px 0;
   font-size: 0.95em;
   line-height: 1.5;
@@ -317,5 +402,16 @@ h2 {
 
 .job-link:hover {
   background-color: #229954;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
 }
 </style>
