@@ -357,9 +357,12 @@ async def trigger_job_scraping_api(background_tasks: BackgroundTasks):
     logger_main.info("API: Job scraping task added to background.")
     return {"message": "Job scraping process initiated in the background. Check server logs for status and summary."}
 
-# Pydantic model for scrape request
-from pydantic import BaseModel
-from typing import List, Optional # Ensure List and Optional are imported
+# Pydantic models
+from pydantic import BaseModel # Ensure BaseModel is imported here for all models
+# List, Optional are already imported at the top from typing
+
+class GenerateCVRequest(BaseModel):
+    job_ids: List[str]
 
 class ScrapeRequest(BaseModel):
     results_wanted: Optional[int] = None
@@ -374,9 +377,6 @@ class ScrapeRequest(BaseModel):
     is_remote: Optional[bool] = None
     easy_apply: Optional[bool] = None # For LinkedIn
     description_format: Optional[str] = None # "html" or "markdown"
-
-class GenerateCVRequest(BaseModel):
-    job_ids: List[str]
 
 # Modified Scrape Jobs Endpoint (POST, with overrides)
 # Changed path from /api/scrape-jobs to /scrape-jobs/ to match subtask
