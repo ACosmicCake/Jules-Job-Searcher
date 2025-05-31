@@ -24,7 +24,9 @@
     "company_size_preferences": ["Medium", "Large"],
     "industries_of_interest": ["Technology", "Finance"],
     "work_authorization_status": "US Citizen",
-    "willing_to_relocate": true
+    "willing_to_relocate": true,
+    "results_wanted": 20,
+    "hours_old": 72
   },
   "cv_paths": {
     "pdf": "dummy_cv.pdf",
