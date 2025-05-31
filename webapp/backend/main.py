@@ -87,6 +87,27 @@ app.add_middleware(
     allow_headers=["*"], # Allows all headers
 )
 
+# --- Pydantic models ---
+from pydantic import BaseModel # Ensure BaseModel is imported here for all models
+# List, Optional are already imported at the top from typing
+
+class GenerateCVRequest(BaseModel):
+    job_ids: List[str]
+
+class ScrapeRequest(BaseModel):
+    results_wanted: Optional[int] = None
+    hours_old: Optional[int] = None
+    sites_to_scrape: Optional[List[str]] = None
+    country_indeed: Optional[str] = None
+    linkedin_fetch_description: Optional[bool] = None
+    # New optional parameters for jobspy
+    google_search_term: Optional[str] = None
+    distance: Optional[int] = None
+    job_type: Optional[str] = None # e.g. fulltime, parttime, contract, internship, temporary
+    is_remote: Optional[bool] = None
+    easy_apply: Optional[bool] = None # For LinkedIn
+    description_format: Optional[str] = None # "html" or "markdown"
+
 # --- Helper functions for config and DB ---
 async def _load_app_config() -> Dict[str, Any] | None:
     # ... (content unchanged)
@@ -356,27 +377,6 @@ async def trigger_job_scraping_api(background_tasks: BackgroundTasks):
     background_tasks.add_task(scrape_jobs_task_wrapper)
     logger_main.info("API: Job scraping task added to background.")
     return {"message": "Job scraping process initiated in the background. Check server logs for status and summary."}
-
-# Pydantic models
-from pydantic import BaseModel # Ensure BaseModel is imported here for all models
-# List, Optional are already imported at the top from typing
-
-class GenerateCVRequest(BaseModel):
-    job_ids: List[str]
-
-class ScrapeRequest(BaseModel):
-    results_wanted: Optional[int] = None
-    hours_old: Optional[int] = None
-    sites_to_scrape: Optional[List[str]] = None
-    country_indeed: Optional[str] = None
-    linkedin_fetch_description: Optional[bool] = None
-    # New optional parameters for jobspy
-    google_search_term: Optional[str] = None
-    distance: Optional[int] = None
-    job_type: Optional[str] = None # e.g. fulltime, parttime, contract, internship, temporary
-    is_remote: Optional[bool] = None
-    easy_apply: Optional[bool] = None # For LinkedIn
-    description_format: Optional[str] = None # "html" or "markdown"
 
 # Modified Scrape Jobs Endpoint (POST, with overrides)
 # Changed path from /api/scrape-jobs to /scrape-jobs/ to match subtask
