@@ -13,12 +13,4 @@ pandas
 dateparser
 
 # Utility script dependencies (e.g., for generate_dummy_pdf.py)
-reportlab 
-
-# Add other backend-specific dependencies here as identified.
-# For example:
-# sqlalchemy (if using a more complex ORM)
-# psycopg2-binary (if using PostgreSQL)
-# python-jose[cryptography] (for JWT auth)
-# aiofiles (for async file operations)
-# jinja2 (if serving HTML templates from backend)
+reportlab
