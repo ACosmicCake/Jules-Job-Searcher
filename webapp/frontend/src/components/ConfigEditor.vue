@@ -53,6 +53,82 @@
           <label for="hoursOld">Hours Old:</label>
           <input type="number" id="hoursOld" v-model.number="hoursOld" placeholder="e.g., 72">
         </div>
+
+        <div class="input-group">
+          <label>Sites to Scrape:</label>
+          <div class="checkbox-group checkbox-group-sites">
+            <input type="checkbox" id="scrapeIndeed" v-model="sitesToScrape.indeed">
+            <label for="scrapeIndeed">Indeed</label>
+            <input type="checkbox" id="scrapeLinkedIn" v-model="sitesToScrape.linkedin">
+            <label for="scrapeLinkedIn">LinkedIn</label>
+            <input type="checkbox" id="scrapeZipRecruiter" v-model="sitesToScrape.ziprecruiter">
+            <label for="scrapeZipRecruiter">ZipRecruiter</label>
+            <input type="checkbox" id="scrapeGlassdoor" v-model="sitesToScrape.glassdoor">
+            <label for="scrapeGlassdoor">Glassdoor</label>
+            <input type="checkbox" id="scrapeGoogle" v-model="sitesToScrape.google">
+            <label for="scrapeGoogle">Google</label>
+            <input type="checkbox" id="scrapeBayt" v-model="sitesToScrape.bayt">
+            <label for="scrapeBayt">Bayt</label>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="countryIndeed">Country for Indeed (e.g., USA, GBR):</label>
+          <input type="text" id="countryIndeed" v-model.trim="countryIndeed" placeholder="USA">
+        </div>
+
+        <div class="input-group">
+          <label for="googleSearchTerm">Google Specific Search Term:</label>
+          <input type="text" id="googleSearchTerm" v-model.trim="googleSearchTerm" placeholder="e.g., software engineer intern">
+        </div>
+
+        <div class="input-group">
+          <label for="distance">Search Distance (miles):</label>
+          <input type="number" id="distance" v-model.number="distance" placeholder="50">
+        </div>
+
+        <div class="input-group">
+          <label for="jobType">Job Type:</label>
+          <select id="jobType" v-model="jobType">
+            <option value="">Any</option>
+            <option value="fulltime">Full-time</option>
+            <option value="parttime">Part-time</option>
+            <option value="internship">Internship</option>
+            <option value="contract">Contract</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label>Fetch LinkedIn Descriptions:</label>
+          <div class="checkbox-group">
+            <input type="checkbox" id="linkedinFetchDesc" v-model="linkedinFetchDescription">
+            <label for="linkedinFetchDesc">Enabled</label>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Remote Only:</label>
+          <div class="checkbox-group">
+            <input type="checkbox" id="isRemote" v-model="isRemote">
+            <label for="isRemote">Enabled</label>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>Easy Apply Only (LinkedIn):</label>
+          <div class="checkbox-group">
+            <input type="checkbox" id="easyApply" v-model="easyApply">
+            <label for="easyApply">Enabled</label>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="descriptionFormat">Description Format:</label>
+          <select id="descriptionFormat" v-model="descriptionFormat">
+            <option value="markdown">Markdown</option>
+            <option value="html">HTML</option>
+          </select>
+        </div>
       </div>
       <button @click="triggerScrapeWithParams" :disabled="isLoading" class="button-scrape">
         {{ isLoading ? 'Scraping...' : 'Scrape Jobs with Parameters' }}
@@ -78,6 +154,22 @@ const isJsonValid = ref(true);
 // Reactive variables for new scrape parameters
 const resultsWanted = ref(20); 
 const hoursOld = ref(72);
+const sitesToScrape = ref({
+  indeed: true,
+  linkedin: true,
+  ziprecruiter: false,
+  glassdoor: false,
+  google: false,
+  bayt: false
+});
+const countryIndeed = ref('USA');
+const linkedinFetchDescription = ref(true);
+const googleSearchTerm = ref('');
+const distance = ref(50);
+const jobType = ref(''); // Default for "Any"
+const isRemote = ref(false);
+const easyApply = ref(false);
+const descriptionFormat = ref('markdown');
 const scrapeStatusMessage = ref(''); // For displaying scrape status
 const isScrapeSuccess = ref(false);
 
@@ -162,13 +254,26 @@ const triggerScrapeWithParams = async () => {
   scrapeStatusMessage.value = '';
   isScrapeSuccess.value = false;
   try {
+    const selectedSites = Object.entries(sitesToScrape.value)
+      .filter(([, isActive]) => isActive)
+      .map(([siteName]) => siteName);
+
     const params = {
       results_wanted: resultsWanted.value,
       hours_old: hoursOld.value,
+      sites_to_scrape: selectedSites.length > 0 ? selectedSites : null, // Send null if no sites selected, or handle as needed by backend
+      country_indeed: countryIndeed.value,
+      linkedin_fetch_description: linkedinFetchDescription.value,
+      google_search_term: googleSearchTerm.value || null, // Send null if empty
+      distance: distance.value,
+      job_type: jobType.value || null, // Send null if "Any" (empty string)
+      is_remote: isRemote.value,
+      easy_apply: easyApply.value,
+      description_format: descriptionFormat.value,
     };
     // Assuming api.js will have a method like triggerScrapingWithParams
     const response = await api.triggerScrapingWithParams(params); 
-    scrapeStatusMessage.value = `Scraping initiated successfully. ${response.data?.message || ''} Jobs processed: ${response.data?.total_jobs_processed_from_fetch || 'N/A'}, New: ${response.data?.new_jobs_added || 'N/A'}`;
+    scrapeStatusMessage.value = `Scraping initiated with custom parameters. ${response.data?.message || ''} Jobs processed: ${response.data?.total_jobs_processed_from_fetch || 'N/A'}, New: ${response.data?.new_jobs_added || 'N/A'}`;
     isScrapeSuccess.value = true;
     // console.log('Scraping triggered:', response.data);
   } catch (error) {
@@ -305,29 +410,77 @@ textarea {
 
 .scrape-inputs {
   display: flex;
+  flex-wrap: wrap; /* Allow items to wrap to the next line */
   gap: 20px; /* Spacing between input groups */
   margin-bottom: 15px;
-  align-items: center;
+  /* align-items: center; */ /* Can be removed or adjusted if flex-start is better for wrapped items */
+  align-items: flex-start; /* Align items to the start of the cross axis */
 }
 
 .input-group {
   display: flex;
   flex-direction: column; /* Stack label on top of input */
+  margin-bottom: 10px;
+  min-width: 180px; /* Ensure a minimum width for each group */
 }
 
-.input-group label {
+.input-group label,
+.checkbox-group label {
   margin-bottom: 5px;
   font-size: 0.9em;
   color: #555;
 }
 
-.input-group input[type="number"] {
+/* Specific styling for labels within a checkbox group to reduce their right margin */
+.checkbox-group label {
+  margin-right: 8px;
+  margin-bottom: 0; /* Align with checkbox */
+}
+
+.input-group > label { /* Styling for the main label of an input group */
+  font-weight: bold;
+  margin-bottom: 8px;
+  display: block;
+}
+
+
+.input-group input[type="number"],
+.input-group input[type="text"],
+.input-group select { /* Added select styling */
   padding: 8px 12px;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 0.95em;
-  width: 150px; /* Adjust as needed */
+  width: 100%; /* Make input elements take full width of .input-group */
+  box-sizing: border-box;
 }
+
+.checkbox-group {
+  display: flex;
+  flex-direction: row; /* Default, but explicit */
+  flex-wrap: wrap; /* Allow checkboxes to wrap within their group if needed */
+  align-items: center;
+}
+.checkbox-group.checkbox-group-sites label {
+  margin-right: 10px; /* More space for site labels */
+}
+
+
+.checkbox-group input[type="checkbox"] {
+  margin-right: 4px;
+  margin-bottom: 4px; /* Add some space if they wrap */
+}
+
+/* Remove redundant specific label styling now that .input-group > label handles boldness */
+/*
+.input-group > label[for^="scrape"],
+.input-group > label[for="countryIndeed"],
+.input-group > label:not([for^="scrapeIndeed"]):not([for^="scrapeLinkedIn"]):not([for="linkedinFetchDesc"]) {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+*/
+
 
 .button-scrape {
   background-color: #ff8c00; /* Orange */

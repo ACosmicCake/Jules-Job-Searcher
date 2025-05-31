@@ -220,37 +220,88 @@ def fetch_raw_jobs(config: dict) -> list[dict]:
 
     all_jobs_data: list[dict] = []
 
-    # Retrieve sites_to_scrape from config, with a default
+    # 1. Determine sites_to_scrape
     default_sites = ["indeed", "linkedin"]
-    sites_to_scrape = job_prefs.get('sites_to_scrape', default_sites)
-    if sites_to_scrape == default_sites and 'sites_to_scrape' not in job_prefs:
-        logger.info(f"Scraper: 'sites_to_scrape' not found in config's job_preferences. Using default sites: {default_sites}")
-    logger.info(f"Scraper: Targeting sites: {sites_to_scrape}")
+    # Prioritize sites_to_scrape if it exists directly in job_prefs (passed via config_override)
+    if 'sites_to_scrape' in job_prefs and job_prefs['sites_to_scrape']:
+        sites_to_scrape = job_prefs['sites_to_scrape']
+        logger.info(f"Scraper: Using 'sites_to_scrape' from job_preferences (override): {sites_to_scrape}")
+    else:
+        sites_to_scrape = default_sites
+        logger.info(f"Scraper: 'sites_to_scrape' not found in job_preferences or is empty. Using default sites: {default_sites}")
+    logger.info(f"Scraper: Final sites to target: {sites_to_scrape}")
 
-    # Determine country_indeed based on personal_info (once, if applicable to all searches)
-    # Or adjust if it needs to be per role/location if config supports such granularity
-    country_indeed_setting = "USA" # Default
-    address = personal_info.get('address', {})
-    country_field = address.get('country', address.get('Country'))
-    if country_field and isinstance(country_field, str) and country_field.strip().upper() in ["USA", "US", "UNITED STATES"]:
-        country_indeed_setting = "USA"
-    # Add other country logic here if necessary, e.g. Canada, UK, etc.
+    # 2. Determine country_indeed
+    country_indeed_to_use = "USA" # Default value
+    source_of_country_indeed = "default ('USA')"
+
+    if 'country_indeed' in job_prefs and job_prefs['country_indeed']:
+        country_indeed_to_use = job_prefs['country_indeed']
+        source_of_country_indeed = "job_preferences (override)"
+    elif personal_info.get('address'):
+        address = personal_info.get('address', {})
+        country_from_personal_info = address.get('country', address.get('Country')) # Check for 'country' or 'Country'
+        if country_from_personal_info and isinstance(country_from_personal_info, str) and country_from_personal_info.strip():
+            # Basic mapping for common cases, can be expanded
+            # For now, we are only checking if it's USA or not for the example, but jobspy might support more.
+            # The main point is to get the country string.
+            country_indeed_to_use = country_from_personal_info.strip()
+            source_of_country_indeed = "personal_info.address.country"
+    logger.info(f"Scraper: Using 'country_indeed': '{country_indeed_to_use}' (Source: {source_of_country_indeed})")
+
+    # 3. Determine linkedin_fetch_description
+    linkedin_fetch_description_to_use = True # Default value
+    source_of_linkedin_fetch = "default (True)"
+
+    if 'linkedin_fetch_description' in job_prefs and isinstance(job_prefs['linkedin_fetch_description'], bool):
+        linkedin_fetch_description_to_use = job_prefs['linkedin_fetch_description']
+        source_of_linkedin_fetch = "job_preferences (override)"
+    logger.info(f"Scraper: Using 'linkedin_fetch_description': {linkedin_fetch_description_to_use} (Source: {source_of_linkedin_fetch})")
+
+    # 4. Determine new optional parameters
+    google_search_term_config = job_prefs.get('google_search_term')
+    logger.info(f"Scraper: Using 'google_search_term': {google_search_term_config if google_search_term_config else 'Not specified'}")
+
+    distance_config = job_prefs.get('distance', 50) # Default to 50 if not specified
+    logger.info(f"Scraper: Using 'distance': {distance_config} (Defaulted to 50 if not in config)")
+
+    job_type_config = job_prefs.get('job_type') # e.g., fulltime, parttime. Default None if not specified.
+    logger.info(f"Scraper: Using 'job_type': {job_type_config if job_type_config else 'Not specified'}")
+
+    is_remote_config = job_prefs.get('is_remote', False) # Default to False if not specified
+    logger.info(f"Scraper: Using 'is_remote': {is_remote_config} (Defaulted to False if not in config)")
+
+    easy_apply_config = job_prefs.get('easy_apply', False) # Default to False if not specified
+    logger.info(f"Scraper: Using 'easy_apply': {easy_apply_config} (Defaulted to False if not in config, mainly for LinkedIn)")
+
+    description_format_config = job_prefs.get('description_format', 'markdown') # Default to 'markdown'
+    logger.info(f"Scraper: Using 'description_format': {description_format_config} (Defaulted to 'markdown' if not in config)")
 
     for role in desired_roles:
         for loc in target_locations:
             logger.info(f"Scraper: Scraping for role: '{role}' in location: '{loc}' on sites: {sites_to_scrape}")
             
             try:
-                jobs_df = jobspy.scrape_jobs(
-                    site_name=sites_to_scrape,
-                    search_term=role,
-                    location=loc,
-                    results_wanted=results_wanted_config,
-                    hours_old=hours_old_config,
-                    country_indeed=country_indeed_setting, # Default "USA" or from config
-                    linkedin_fetch_description=True,    # Changed to True as per subtask
-                    verbose_level=0 # Minimize jobspy's own console output
-                )
+                jobspy_kwargs = {
+                    'site_name': sites_to_scrape,
+                    'search_term': role,
+                    'location': loc,
+                    'results_wanted': results_wanted_config,
+                    'hours_old': hours_old_config,
+                    'country_indeed': country_indeed_to_use,
+                    'linkedin_fetch_description': linkedin_fetch_description_to_use,
+                    'distance': distance_config,
+                    'description_format': description_format_config,
+                    'is_remote': is_remote_config,
+                    'easy_apply': easy_apply_config,
+                    'verbose_level': 0
+                }
+                if google_search_term_config:
+                    jobspy_kwargs['search_term_within_results'] = google_search_term_config # Assuming this is the correct jobspy param for google_search_term
+                if job_type_config:
+                    jobspy_kwargs['job_type'] = job_type_config
+
+                jobs_df = jobspy.scrape_jobs(**jobspy_kwargs)
 
                 if jobs_df is not None and not jobs_df.empty:
                     # Convert DataFrame to list of dictionaries

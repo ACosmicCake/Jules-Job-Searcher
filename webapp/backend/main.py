@@ -250,9 +250,21 @@ async def trigger_job_scraping_api(background_tasks: BackgroundTasks):
 
 # Pydantic model for scrape request
 from pydantic import BaseModel
+from typing import List, Optional # Ensure List and Optional are imported
+
 class ScrapeRequest(BaseModel):
     results_wanted: Optional[int] = None
     hours_old: Optional[int] = None
+    sites_to_scrape: Optional[List[str]] = None
+    country_indeed: Optional[str] = None
+    linkedin_fetch_description: Optional[bool] = None
+    # New optional parameters for jobspy
+    google_search_term: Optional[str] = None
+    distance: Optional[int] = None
+    job_type: Optional[str] = None # e.g. fulltime, parttime, contract, internship, temporary
+    is_remote: Optional[bool] = None
+    easy_apply: Optional[bool] = None # For LinkedIn
+    description_format: Optional[str] = None # "html" or "markdown"
 
 # Modified Scrape Jobs Endpoint (POST, with overrides)
 # Changed path from /api/scrape-jobs to /scrape-jobs/ to match subtask
@@ -285,8 +297,63 @@ async def scrape_jobs_endpoint_post(request_params: ScrapeRequest = None):
                 if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
                 config_override['job_preferences']['hours_old'] = request_params.hours_old
                 logger_main.info(f"API: Overriding 'hours_old' to {request_params.hours_old}")
+
+            # New parameter: sites_to_scrape
+            if request_params.sites_to_scrape is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['sites_to_scrape'] = request_params.sites_to_scrape
+                logger_main.info(f"API: Overriding 'sites_to_scrape' to {request_params.sites_to_scrape}")
+
+            # New parameter: country_indeed
+            if request_params.country_indeed is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                # Assuming 'country_indeed' is the key expected by scraper.py within job_preferences
+                config_override['job_preferences']['country_indeed'] = request_params.country_indeed
+                logger_main.info(f"API: Overriding 'country_indeed' to {request_params.country_indeed}")
+
+            # New parameter: linkedin_fetch_description
+            if request_params.linkedin_fetch_description is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['linkedin_fetch_description'] = request_params.linkedin_fetch_description
+                logger_main.info(f"API: Overriding 'linkedin_fetch_description' to {request_params.linkedin_fetch_description}")
+
+            # google_search_term
+            if request_params.google_search_term is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['google_search_term'] = request_params.google_search_term
+                logger_main.info(f"API: Overriding 'google_search_term' to {request_params.google_search_term}")
+
+            # distance
+            if request_params.distance is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['distance'] = request_params.distance
+                logger_main.info(f"API: Overriding 'distance' to {request_params.distance}")
+
+            # job_type
+            if request_params.job_type is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['job_type'] = request_params.job_type
+                logger_main.info(f"API: Overriding 'job_type' to {request_params.job_type}")
+
+            # is_remote
+            if request_params.is_remote is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['is_remote'] = request_params.is_remote
+                logger_main.info(f"API: Overriding 'is_remote' to {request_params.is_remote}")
+
+            # easy_apply
+            if request_params.easy_apply is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['easy_apply'] = request_params.easy_apply
+                logger_main.info(f"API: Overriding 'easy_apply' to {request_params.easy_apply}")
+
+            # description_format
+            if request_params.description_format is not None:
+                if 'job_preferences' not in config_override: config_override['job_preferences'] = {}
+                config_override['job_preferences']['description_format'] = request_params.description_format
+                logger_main.info(f"API: Overriding 'description_format' to {request_params.description_format}")
         
-        logger_main.info("API: Calling run_scraping_and_storing with potentially overridden config...")
+        logger_main.info(f"API: Calling run_scraping_and_storing with config: {config_override}") # Log the final config
         summary = run_scraping_and_storing(config_override=config_override)
         logger_main.info(f"API: run_scraping_and_storing completed. Summary: {summary}")
         
